@@ -215,28 +215,55 @@ function createOverlay(theme) {
   });
 
   // Card
-  const card = el('div', {
-    backgroundColor: theme.bg,
-    color: theme.text,
-    borderRadius: '12px',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
-    padding: '28px 32px',
-    maxWidth: '480px',
-    width: '90%',
-    zIndex: '2147483647',
-    position: 'relative',
-    lineHeight: '1.5',
-  });
+  const card = el(
+    'div',
+    {
+      backgroundColor: theme.bg,
+      color: theme.text,
+      borderRadius: '12px',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+      padding: '28px 32px',
+      maxWidth: '480px',
+      width: '90%',
+      zIndex: '2147483647',
+      position: 'relative',
+      lineHeight: '1.5',
+    },
+    {
+      role: 'dialog',
+      'aria-modal': 'true',
+      'aria-labelledby': 'rd-title',
+    },
+  );
 
   // Title
-  const title = el('div', {
-    fontSize: '20px',
-    fontWeight: '700',
-    marginBottom: '20px',
-  }, { textContent: 'Rover Dumper' });
+  const title = el(
+    'div',
+    {
+      fontSize: '20px',
+      fontWeight: '700',
+      marginBottom: '20px',
+    },
+    { textContent: 'Rover Dumper', id: 'rd-title' },
+  );
 
   card.appendChild(title);
   backdrop.appendChild(card);
+
+  // Close on Escape
+  const onKeyDown = (e) => {
+    if (e.key === 'Escape') backdrop.remove();
+  };
+  window.addEventListener('keydown', onKeyDown);
+
+  // Cleanup listener when backdrop is removed
+  const observer = new MutationObserver(() => {
+    if (!document.body.contains(backdrop)) {
+      window.removeEventListener('keydown', onKeyDown);
+      observer.disconnect();
+    }
+  });
+  observer.observe(document.body, { childList: true });
 
   return { backdrop, card, title };
 }
@@ -314,9 +341,9 @@ function showConfirmation(photos, petName, theme, onDownload, onCancel) {
 
   // Date range inputs
   const dateFromLabel = el('span', { whiteSpace: 'nowrap' }, { textContent: 'Date range:' });
-  const dateFrom = el('input', inputStyle, { type: 'date' });
+  const dateFrom = el('input', inputStyle, { type: 'date', 'aria-label': 'Date from' });
   const dateToLabel = el('span', { textAlign: 'center' }, { textContent: 'to' });
-  const dateTo = el('input', inputStyle, { type: 'date' });
+  const dateTo = el('input', inputStyle, { type: 'date', 'aria-label': 'Date to' });
 
   if (minDate) dateFrom.value = formatDateISO(minDate);
   if (maxDate) dateTo.value = formatDateISO(maxDate);
@@ -328,9 +355,21 @@ function showConfirmation(photos, petName, theme, onDownload, onCancel) {
 
   // Photo range inputs
   const rangeFromLabel = el('span', { whiteSpace: 'nowrap' }, { textContent: 'Photo range:' });
-  const rangeFrom = el('input', inputStyle, { type: 'number', min: '1', max: String(photos.length), value: '1' });
+  const rangeFrom = el('input', inputStyle, {
+    type: 'number',
+    min: '1',
+    max: String(photos.length),
+    value: '1',
+    'aria-label': 'Photo range start',
+  });
   const rangeToLabel = el('span', { textAlign: 'center' }, { textContent: 'to' });
-  const rangeTo = el('input', inputStyle, { type: 'number', min: '1', max: String(photos.length), value: String(photos.length) });
+  const rangeTo = el('input', inputStyle, {
+    type: 'number',
+    min: '1',
+    max: String(photos.length),
+    value: String(photos.length),
+    'aria-label': 'Photo range end',
+  });
 
   filterGrid.appendChild(rangeFromLabel);
   filterGrid.appendChild(rangeFrom);
