@@ -1,6 +1,6 @@
 # 🐶 Rover Dumper 💩
 
-Bulk download your pet's photos from [Rover.com](https://www.rover.com). One click, one zip file, full quality.
+Bulk download and backup your pet's photos from [Rover.com](https://www.rover.com). One click, one zip file, high-quality exports.
 
 Rover.com has no bulk photo download -- you can only view photos one at a time. This bookmarklet paginates Rover's internal API, fetches every image at full quality, zips them up, and triggers a single download.
 
