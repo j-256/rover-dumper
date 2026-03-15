@@ -1,0 +1,200 @@
+<<<<<<< SEARCH
+    <!-- How to use -->
+    <section>
+      <h2>How to Use</h2>
+      <ol class="steps">
+        <li>
+          <span class="step-num">1</span>
+          <h3>Install</h3>
+          <p>Drag the green "Rover Dumper" button above to your bookmarks bar</p>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <h3>Navigate</h3>
+          <p>Go to your pet's profile page on Rover.com</p>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <h3>Click</h3>
+          <p>Click "Rover Dumper" in your bookmarks bar and follow the prompts</p>
+        </li>
+      </ol>
+    </section>
+
+    <!-- Installation details -->
+    <section class="install-details">
+      <h2>Installation</h2>
+
+      <h3>Drag and drop</h3>
+      <p>The easiest way: drag the green button at the top of this page to your bookmarks bar. If your bookmarks bar isn't visible, press <code>Ctrl+Shift+B</code> (Windows/Linux) or <code>Cmd+Shift+B</code> (Mac) to show it.</p>
+
+      <h3>Manual installation</h3>
+      <p>If drag-and-drop doesn't work in your browser:</p>
+      <ol>
+        <li>Copy the bookmarklet code using the button below</li>
+        <li>Right-click your bookmarks bar and choose "Add page" or "Add bookmark"</li>
+        <li>Set the name to <strong>Rover Dumper</strong></li>
+        <li>Paste the copied code as the URL</li>
+      </ol>
+      <div class="copy-row">
+        <button class="copy-btn" id="copy-btn">Copy bookmarklet code</button>
+        <span class="copy-status" id="copy-status"></span>
+      </div>
+
+      <h3>Browser notes</h3>
+      <p><strong>Chrome / Edge / Brave</strong>: Drag and drop works. You may need to click "Keep" if Chrome warns about the bookmark.</p>
+      <p><strong>Firefox</strong>: Drag and drop works. If the bookmarks bar is hidden, use <code>Ctrl+Shift+B</code> to show it.</p>
+      <p><strong>Safari</strong>: Drag and drop may not work. Use the manual installation method -- add a bookmark, then edit it and paste the bookmarklet code as the URL.</p>
+    </section>
+
+    <!-- Features -->
+    <section>
+      <h2>Features</h2>
+      <div class="features">
+        <div class="feature">
+          <h3>Full quality</h3>
+          <p>Downloads original high-resolution images, not thumbnails</p>
+        </div>
+        <div class="feature">
+          <h3>Filter before downloading</h3>
+          <p>Pick a date range or photo range to download exactly what you want</p>
+        </div>
+        <div class="feature">
+          <h3>Progress tracking</h3>
+          <p>Live progress bar with download size and time elapsed</p>
+        </div>
+        <div class="feature">
+          <h3>Cancel anytime</h3>
+          <p>Stop mid-download and optionally save what's been collected</p>
+        </div>
+        <div class="feature">
+          <h3>Privacy first</h3>
+          <p>Runs entirely in your browser -- no data sent anywhere</p>
+        </div>
+        <div class="feature">
+          <h3>Open source</h3>
+          <p>Read every line of code on GitHub. MIT licensed</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section>
+      <h2>FAQ</h2>
+
+      <div class="faq-item">
+        <h3>Is this safe?</h3>
+        <p>Yes. The bookmarklet runs entirely in your browser. It doesn't send data anywhere -- photos go straight from Rover's servers into a zip file on your computer. The code is open source so you can verify this yourself.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>Do I need to be logged into Rover?</h3>
+        <p>Yes. The bookmarklet uses your existing Rover.com session to access the photo API. Navigate to your pet's profile page while logged in, then click the bookmarklet.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>How long does it take?</h3>
+        <p>It depends on how many photos your pet has and your internet speed. The progress screen shows elapsed time and estimated size so you can gauge how long it will take.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>What browsers are supported?</h3>
+        <p>Chrome, Firefox, Edge, and Safari on desktop. Mobile browsers generally don't support bookmarklets.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>I have a lot of photos. Will this work?</h3>
+        <p>Yes, but very large sets (1000+ photos) may use significant RAM. Use the photo range filter to download in batches if needed.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>Does this work on mobile?</h3>
+        <p>No. Bookmarklets require a desktop browser with a bookmarks bar.</p>
+      </div>
+    </section>
+=======
+    <!-- How to use -->
+    <section>
+      <h2>Quick Start</h2>
+      <ol class="steps">
+        <li>
+          <span class="step-num">1</span>
+          <h3>Install</h3>
+          <p>Drag the green <strong>Rover Dumper</strong> button above to your bookmarks bar.</p>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <h3>Navigate</h3>
+          <p>Open your pet's profile on <strong>Rover.com</strong> while logged in.</p>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <h3>Run</h3>
+          <p>Click the bookmark to start your bulk download.</p>
+        </li>
+      </ol>
+    </section>
+
+    <!-- Installation details -->
+    <section class="install-details">
+      <h2>Installation Guide</h2>
+      <p>If drag-and-drop isn't working for you, use this manual method:</p>
+      <ol>
+        <li>Right-click your bookmarks bar and select <strong>Add Page</strong> or <strong>Add Bookmark</strong>.</li>
+        <li>Name it <strong>Rover Dumper</strong>.</li>
+        <li>Copy the code below and paste it into the <strong>URL</strong> field.</li>
+      </ol>
+      <div class="copy-row">
+        <button class="copy-btn" id="copy-btn">Copy bookmarklet code</button>
+        <span class="copy-status" id="copy-status"></span>
+      </div>
+
+      <div class="browser-notes">
+        <p><strong>Chrome / Edge / Brave:</strong> Drag and drop works. Show bar with <code>Ctrl+Shift+B</code>.</p>
+        <p><strong>Firefox:</strong> Drag and drop works. Show bar with <code>Ctrl+Shift+B</code>.</p>
+        <p><strong>Safari:</strong> Drag and drop may fail; please use the manual method above.</p>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section>
+      <h2>Key Features</h2>
+      <div class="features">
+        <div class="feature">
+          <h3>Original Quality</h3>
+          <p>Fetches full-resolution images directly from Rover's servers.</p>
+        </div>
+        <div class="feature">
+          <h3>Smart Filtering</h3>
+          <p>Download everything at once or pick a specific date and photo range.</p>
+        </div>
+        <div class="feature">
+          <h3>Live Progress</h3>
+          <p>Track download size, photo count, and estimated time in real-time.</p>
+        </div>
+        <div class="feature">
+          <h3>Private & Secure</h3>
+          <p>Runs 100% in your browser. No data is ever sent to external servers.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section>
+      <h2>FAQ</h2>
+      <div class="faq-grid">
+        <div class="faq-item">
+          <h3>Is it safe?</h3>
+          <p>Completely. It uses your active session to fetch photos you already have access to, zipping them locally on your machine. It's open-source and transparent.</p>
+        </div>
+        <div class="faq-item">
+          <h3>Large photo sets?</h3>
+          <p>It works for 1000+ photos, but may use significant RAM. Use the range filter to download in batches if your browser slows down.</p>
+        </div>
+        <div class="faq-item">
+          <h3>Mobile support?</h3>
+          <p>No. Bookmarklets require a desktop browser with a bookmarks bar (Chrome, Firefox, Edge, Safari).</p>
+        </div>
+      </div>
+    </section>
+>>>>>>> REPLACE
