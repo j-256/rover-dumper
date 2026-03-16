@@ -198,7 +198,7 @@ function createButton(text, theme, primary, onClick) {
 // UI: Overlay Shell
 // ============================================================================
 
-function createOverlay(theme) {
+function createOverlay(theme, onCancelRequested) {
   // Backdrop
   const backdrop = el('div', {
     position: 'fixed',
@@ -226,17 +226,31 @@ function createOverlay(theme) {
     zIndex: '2147483647',
     position: 'relative',
     lineHeight: '1.5',
-  });
+  }, { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'rd-title' });
 
   // Title
   const title = el('div', {
     fontSize: '20px',
     fontWeight: '700',
     marginBottom: '20px',
-  }, { textContent: 'Rover Dumper' });
+  }, { id: 'rd-title', textContent: 'Rover Dumper' });
 
   card.appendChild(title);
   backdrop.appendChild(card);
+
+  const handleEsc = (e) => {
+    if (e.key === 'Escape') {
+      if (onCancelRequested) onCancelRequested();
+      else backdrop.remove();
+    }
+  };
+  document.addEventListener('keydown', handleEsc);
+
+  const originalRemove = backdrop.remove.bind(backdrop);
+  backdrop.remove = () => {
+    document.removeEventListener('keydown', handleEsc);
+    originalRemove();
+  };
 
   return { backdrop, card, title };
 }
@@ -246,7 +260,7 @@ function createOverlay(theme) {
 // ============================================================================
 
 function showConfirmation(photos, petName, theme, onDownload, onCancel) {
-  const { backdrop, card } = createOverlay(theme);
+  const { backdrop, card } = createOverlay(theme, onCancel);
 
   // Compute date range from photo metadata
   const dates = photos
@@ -314,9 +328,9 @@ function showConfirmation(photos, petName, theme, onDownload, onCancel) {
 
   // Date range inputs
   const dateFromLabel = el('span', { whiteSpace: 'nowrap' }, { textContent: 'Date range:' });
-  const dateFrom = el('input', inputStyle, { type: 'date' });
+  const dateFrom = el('input', inputStyle, { type: 'date', 'aria-label': 'Start date' });
   const dateToLabel = el('span', { textAlign: 'center' }, { textContent: 'to' });
-  const dateTo = el('input', inputStyle, { type: 'date' });
+  const dateTo = el('input', inputStyle, { type: 'date', 'aria-label': 'End date' });
 
   if (minDate) dateFrom.value = formatDateISO(minDate);
   if (maxDate) dateTo.value = formatDateISO(maxDate);
@@ -328,9 +342,9 @@ function showConfirmation(photos, petName, theme, onDownload, onCancel) {
 
   // Photo range inputs
   const rangeFromLabel = el('span', { whiteSpace: 'nowrap' }, { textContent: 'Photo range:' });
-  const rangeFrom = el('input', inputStyle, { type: 'number', min: '1', max: String(photos.length), value: '1' });
+  const rangeFrom = el('input', inputStyle, { type: 'number', min: '1', max: String(photos.length), value: '1', 'aria-label': 'Start photo number' });
   const rangeToLabel = el('span', { textAlign: 'center' }, { textContent: 'to' });
-  const rangeTo = el('input', inputStyle, { type: 'number', min: '1', max: String(photos.length), value: String(photos.length) });
+  const rangeTo = el('input', inputStyle, { type: 'number', min: '1', max: String(photos.length), value: String(photos.length), 'aria-label': 'End photo number' });
 
   filterGrid.appendChild(rangeFromLabel);
   filterGrid.appendChild(rangeFrom);
@@ -415,7 +429,7 @@ function showConfirmation(photos, petName, theme, onDownload, onCancel) {
 // ============================================================================
 
 function showProgress(totalPhotos, petName, theme, onCancel) {
-  const { backdrop, card, title } = createOverlay(theme);
+  const { backdrop, card, title } = createOverlay(theme, onCancel);
 
   // Cancel button in the title row
   const cancelBtn = createButton('Cancel', theme, false, onCancel);
@@ -529,7 +543,7 @@ function showProgress(totalPhotos, petName, theme, onCancel) {
 // ============================================================================
 
 function showError(message, theme) {
-  const { backdrop, card } = createOverlay(theme);
+  const { backdrop, card } = createOverlay(theme, () => backdrop.remove());
 
   const msg = el('div', {
     marginBottom: '20px',
@@ -550,7 +564,7 @@ function showError(message, theme) {
 // ============================================================================
 
 function showPartialOffer(collectedBlobs, photos, petName, theme) {
-  const { backdrop, card } = createOverlay(theme);
+  const { backdrop, card } = createOverlay(theme, () => backdrop.remove());
 
   const msg = el('div', {
     marginBottom: '20px',
@@ -724,7 +738,7 @@ async function downloadPhotos(photos, petName, theme, confirmBackdrop) {
   const petName = getPetName();
 
   // Show loading state
-  const { backdrop: loadingBackdrop, card: loadingCard } = createOverlay(theme);
+  const { backdrop: loadingBackdrop, card: loadingCard } = createOverlay(theme, () => loadingBackdrop.remove());
   const loadingMsg = el('div', { fontSize: '15px' }, { textContent: 'Loading photo metadata...' });
   loadingCard.appendChild(loadingMsg);
   document.body.appendChild(loadingBackdrop);
