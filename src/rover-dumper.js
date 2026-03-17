@@ -226,17 +226,30 @@ function createOverlay(theme) {
     zIndex: '2147483647',
     position: 'relative',
     lineHeight: '1.5',
-  });
+  }, { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'rd-title' });
 
   // Title
   const title = el('div', {
     fontSize: '20px',
     fontWeight: '700',
     marginBottom: '20px',
-  }, { textContent: 'Rover Dumper' });
+  }, { textContent: 'Rover Dumper', id: 'rd-title' });
 
   card.appendChild(title);
   backdrop.appendChild(card);
+
+  // Escape key dismisses the overlay
+  const onKeyDown = (e) => {
+    if (e.key === 'Escape') backdrop.remove();
+  };
+  window.addEventListener('keydown', onKeyDown);
+  const observer = new MutationObserver(() => {
+    if (!document.body.contains(backdrop)) {
+      window.removeEventListener('keydown', onKeyDown);
+      observer.disconnect();
+    }
+  });
+  observer.observe(document.body, { childList: true });
 
   return { backdrop, card, title };
 }
@@ -271,7 +284,7 @@ function showConfirmation(photos, petName, theme, onDownload, onCancel) {
       fontSize: '14px',
       color: theme.textSecondary,
     });
-    dateRange.textContent = `Date range: ${formatDateShort(minDate)} -- ${formatDateShort(maxDate)}`;
+    dateRange.textContent = `Date range: ${formatDateShort(minDate)} \u2013 ${formatDateShort(maxDate)}`;
     card.appendChild(dateRange);
   }
 
@@ -314,9 +327,9 @@ function showConfirmation(photos, petName, theme, onDownload, onCancel) {
 
   // Date range inputs
   const dateFromLabel = el('span', { whiteSpace: 'nowrap' }, { textContent: 'Date range:' });
-  const dateFrom = el('input', inputStyle, { type: 'date' });
+  const dateFrom = el('input', inputStyle, { type: 'date', 'aria-label': 'Date from' });
   const dateToLabel = el('span', { textAlign: 'center' }, { textContent: 'to' });
-  const dateTo = el('input', inputStyle, { type: 'date' });
+  const dateTo = el('input', inputStyle, { type: 'date', 'aria-label': 'Date to' });
 
   if (minDate) dateFrom.value = formatDateISO(minDate);
   if (maxDate) dateTo.value = formatDateISO(maxDate);
@@ -328,9 +341,9 @@ function showConfirmation(photos, petName, theme, onDownload, onCancel) {
 
   // Photo range inputs
   const rangeFromLabel = el('span', { whiteSpace: 'nowrap' }, { textContent: 'Photo range:' });
-  const rangeFrom = el('input', inputStyle, { type: 'number', min: '1', max: String(photos.length), value: '1' });
+  const rangeFrom = el('input', inputStyle, { type: 'number', min: '1', max: String(photos.length), value: '1', 'aria-label': 'Photo range start' });
   const rangeToLabel = el('span', { textAlign: 'center' }, { textContent: 'to' });
-  const rangeTo = el('input', inputStyle, { type: 'number', min: '1', max: String(photos.length), value: String(photos.length) });
+  const rangeTo = el('input', inputStyle, { type: 'number', min: '1', max: String(photos.length), value: String(photos.length), 'aria-label': 'Photo range end' });
 
   filterGrid.appendChild(rangeFromLabel);
   filterGrid.appendChild(rangeFrom);
@@ -568,7 +581,7 @@ function showPartialOffer(collectedBlobs, photos, petName, theme) {
     try {
       const zipSize = await buildAndDownloadZip(collectedBlobs, petName, theme, null);
       const zipMB = (zipSize / (1024 * 1024)).toFixed(1);
-      msg.textContent = `Done! ${collectedBlobs.length} photos downloaded -- ${zipMB} MB`;
+      msg.textContent = `Done! ${collectedBlobs.length} photos downloaded \u2014 ${zipMB} MB`;
     } catch (e) {
       msg.textContent = 'Failed to build zip: ' + e.message;
     }
@@ -695,9 +708,9 @@ async function downloadPhotos(photos, petName, theme, confirmBackdrop) {
     const zipMB = (zipSize / (1024 * 1024)).toFixed(1);
 
     if (failCount > 0) {
-      progress.setStatus(`Done! ${blobs.length} of ${photos.length} photos (${failCount} failed) -- ${zipMB} MB`);
+      progress.setStatus(`Done! ${blobs.length} of ${photos.length} photos (${failCount} failed) \u2014 ${zipMB} MB`);
     } else {
-      progress.setStatus(`Done! ${blobs.length} photos downloaded -- ${zipMB} MB`);
+      progress.setStatus(`Done! ${blobs.length} photos downloaded \u2014 ${zipMB} MB`);
     }
 
     progress.showOK();
