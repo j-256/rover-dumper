@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "description": "Bulk download your pet's photos from Rover.com",
   "private": true,
+  "homepage": "https://rover-dumper.jklein.dev/",
+  "repository": "j-256/rover-dumper",
   "scripts": {
     "build": "./build.sh"
   },
