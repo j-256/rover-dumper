@@ -2,51 +2,31 @@
 
 Bulk download your pet's photos from [Rover.com](https://www.rover.com). One click, one zip file, full quality.
 
-Rover.com has no bulk photo download -- you can only view photos one at a time. This bookmarklet paginates Rover's internal API, fetches every image at full quality, zips them up, and triggers a single download.
+**[Install it here](https://rover-dumper.jklein.dev/)** — just drag a button to your bookmarks bar.
 
-## Quick Start
+## Why
 
-1. **Install** -- Drag the "Rover Dumper" button from the [landing page](https://j-256.github.io/rover-dumper/) to your bookmarks bar
-2. **Navigate** -- Go to your pet's profile page on Rover.com (e.g. `rover.com/members/.../dogs/...`)
-3. **Click** -- Click the "Rover Dumper" bookmark
-
-## Features
-
-- **Full quality** -- Downloads original images, not thumbnails
-- **Filter by date or range** -- Pick a date range or photo range before downloading
-- **Progress tracking** -- Live progress bar with download size and elapsed time
-- **Cancel anytime** -- Cancel mid-download and optionally save what's been collected so far
-- **Privacy first** -- Runs entirely in your browser. No data is sent anywhere. Open source
-
-## Installation
-
-### Drag and drop (recommended)
-
-Visit the [landing page](https://j-256.github.io/rover-dumper/) and drag the green "Rover Dumper" button to your bookmarks bar.
-
-### Manual installation
-
-1. Visit the [landing page](https://j-256.github.io/rover-dumper/) and click "Copy bookmarklet code"
-2. Create a new bookmark in your browser
-3. Set the name to "Rover Dumper"
-4. Paste the copied code as the URL
+Rover.com has no bulk photo download. You can only view photos one at a time in a slideshow. This bookmarklet paginates Rover's internal API, fetches every image at full quality, zips them up, and triggers a single download.
 
 ## How It Works
 
-1. Extracts the pet identifier from the Rover.com URL
-2. Paginates the Rover photo API to collect all photo metadata
-3. Shows a confirmation screen with photo count, date range, and optional filters
-4. Downloads each photo sequentially at full quality
-5. Packages everything into a zip file using [JSZip](https://stuk.github.io/jszip/)
-6. Triggers a browser download of the zip
+1. Extracts the pet's opk (identifier) from the `/dogs/{opk}/` URL path
+2. Paginates `/api/v7/pets/{opk}/images/` to collect all photo metadata
+3. Shows a confirmation modal with photo count, date range, and filter controls
+4. Downloads each photo sequentially (no parallel fetches — avoids rate limiting)
+5. Strips CDN query params from image URLs to get the original full-quality file
+6. Builds a zip in-memory using [JSZip](https://stuk.github.io/jszip/) with `STORE` compression (JPEGs are already compressed)
+7. Triggers a browser download via Blob URL
+
+The bookmarklet is entirely self-contained — JSZip is bundled into the minified output by esbuild. No external scripts are loaded at runtime.
 
 ## Privacy & Security
 
-- **No server** -- Everything runs in your browser tab
-- **No tracking** -- No analytics, no cookies, no external requests beyond Rover's own API
-- **No data leaves your browser** -- Photos go straight from Rover's CDN into a local zip file
-- **Open source** -- Read every line of code in `src/rover-dumper.js`
-- **Your credentials stay local** -- Uses your existing Rover.com login session; no passwords are accessed or stored
+- **No server** — everything runs in your browser tab
+- **No tracking** — no analytics, no cookies, no external requests beyond Rover's own API and CDN
+- **No data leaves your browser** — photos go straight from Rover's CDN into a local zip file
+- **Your credentials stay local** — uses your existing Rover.com login session; no passwords are accessed or stored
+- **Open source** — read every line of code in [`src/rover-dumper.js`](src/rover-dumper.js)
 
 ## Browser Compatibility
 
@@ -58,19 +38,15 @@ Visit the [landing page](https://j-256.github.io/rover-dumper/) and drag the gre
 | Safari  | Supported (drag-to-install may vary) |
 | Mobile  | Not supported (bookmarklets require a desktop browser) |
 
-## RAM Note
-
-Each photo is held in memory while building the zip. For very large photo sets (1000+), this may use significant RAM. Use the photo range filter to download in smaller batches if needed.
-
 ## Development
 
 ```bash
-npm install          # Install dependencies
-npm run build        # Bundle + minify -> dist/rover-dumper.min.js
-npm version patch    # Bump version, then npm run build to rebuild
+npm install                       # Install dependencies (jszip + esbuild)
+npm run build                     # Bundle + minify -> dist/rover-dumper.min.js
+npm version <major|minor|patch>   # Bump version + git tag, then npm run build
 ```
 
-The build script uses esbuild to bundle JSZip into the bookmarklet as a self-contained IIFE, then prepends the `javascript:` protocol and version comment.
+`build.sh` bundles JSZip into the bookmarklet source via esbuild as a single IIFE, strips template literals and license comments for single-line output, then injects the result into `index.html` between marker comments. The `%` character is pre-encoded as `%25` in the HTML href to prevent browsers from misinterpreting JS modulo expressions as URL escape sequences.
 
 ## License
 

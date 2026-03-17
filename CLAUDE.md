@@ -7,22 +7,45 @@ Rover Dumper is a browser bookmarklet that bulk-downloads pet photos from Rover.
 ## Key Commands
 
 ```bash
-npm install        # Install dependencies (jszip + esbuild)
-npm run build      # Bundle + minify src -> dist, update site
-npm version patch  # Bump version (then npm run build to rebuild)
+npm install                       # Install dependencies (jszip + esbuild)
+npm run build                     # Bundle + minify src -> dist, update index.html
+npm version <major|minor|patch>   # Bump version + git tag, then npm run build
 ```
 
 ## Architecture
 
 - `src/rover-dumper.js` -- readable source with `import JSZip from 'jszip'`
-- `build.sh` -- esbuild bundles JSZip into a single IIFE, prepends `javascript:/*version*/`, outputs to `dist/rover-dumper.min.js`, and updates `index.html`
-- `index.html` -- self-contained GitHub Pages landing page; bookmarklet href is auto-updated by build
+- `build.sh` -- esbuild bundles JSZip into a single IIFE, outputs to `dist/rover-dumper.min.js`, and injects it into `index.html`
+- `index.html` -- GitHub Pages landing page served at `rover-dumper.jklein.dev`; bookmarklet href is auto-updated by build
+- `CNAME` -- custom domain for GitHub Pages (`rover-dumper.jklein.dev`)
 - Bookmarklet is entirely client-side; no server, no data sent anywhere
+
+## Build Pipeline Details
+
+The build has several layers to make bookmarklets work correctly in browser bookmark URLs:
+
+1. esbuild bundles with `--supported:template-literal=false` (downlevels to `.concat()` so no literal newlines survive -- browsers corrupt newlines in bookmark URLs)
+2. esbuild bundles with `--legal-comments=none` (strips JSZip/pako license comment block)
+3. Output is collapsed to a single line via `tr -d '\n'`
+4. `javascript:/*version*/` prefix is prepended
+5. When injecting into `index.html` href:
+   - `%` is encoded as `%25` (prevents browsers from decoding JS modulo expressions like `%31` as URL escapes)
+   - `&` is encoded as `&amp;` (prevents HTML parser from decoding `&lt` as `<` entity)
+   - `"` is encoded as `&quot;` (prevents breaking the href attribute)
+   - Replacement uses `() => tag` function form to avoid `$&` expansion in JSZip's minified code
 
 ## Conventions
 
 - Version lives in `package.json`; build reads it from there
 - Bookmarklet href in index.html is between `<!-- BOOKMARKLET_START -->` and `<!-- BOOKMARKLET_END -->` marker comments
-- Image URL strategy: strip all query params from any available URL field, append `?quality=100`
+- API endpoint: `/api/v7/pets/{opk}/images/` (not `/images-cached/`; the non-cached endpoint respects `page_size`)
+- Image URL strategy: strip all query params from any available URL field (bare URL returns the original)
 - Sequential image fetches (not parallel) to avoid rate limiting
 - Zip uses `compression: 'STORE'` since JPEGs are already compressed
+- Copy button decodes `%25` back to `%` so manual-paste installation gets raw JS
+
+## GitHub
+
+- Repo: `j-256/rover-dumper`
+- GitHub Pages deploys from `main` branch, root (`/`)
+- Custom domain: `rover-dumper.jklein.dev` (CNAME record -> `j-256.github.io`)
