@@ -6,6 +6,8 @@ import JSZip from 'jszip';
 
 const PAGE_SIZE = 100; // request large pages; server may cap lower
 const EST_AVG_PHOTO_MB = 1.4; // derived from real Rover photo data
+const MIN_SAMPLES = 10; // minimum fetch samples before using running averages
+const CONCURRENCY = 3; // parallel image fetches
 
 // ============================================================================
 // URL Validation & Pet Identification
@@ -198,7 +200,7 @@ function createButton(text, theme, primary, onClick) {
 // UI: Overlay Shell
 // ============================================================================
 
-function createOverlay(theme) {
+function createOverlay(theme, onEscape) {
   // Backdrop
   const backdrop = el('div', {
     position: 'fixed',
@@ -236,11 +238,16 @@ function createOverlay(theme) {
   }, { textContent: 'Rover Dumper', id: 'rd-title' });
 
   card.appendChild(title);
+  backdrop.dataset.roverDumper = '';
   backdrop.appendChild(card);
 
-  // Escape key dismisses the overlay
+  // Escape key dismisses the overlay (or delegates to custom handler)
+  let escHandler = onEscape;
   const onKeyDown = (e) => {
-    if (e.key === 'Escape') backdrop.remove();
+    if (e.key === 'Escape') {
+      if (escHandler) escHandler();
+      else backdrop.remove();
+    }
   };
   window.addEventListener('keydown', onKeyDown);
   const observer = new MutationObserver(() => {
@@ -251,7 +258,7 @@ function createOverlay(theme) {
   });
   observer.observe(document.body, { childList: true });
 
-  return { backdrop, card, title };
+  return { backdrop, card, title, setEscapeHandler(fn) { escHandler = fn; } };
 }
 
 // ============================================================================
@@ -427,8 +434,8 @@ function showConfirmation(photos, petName, theme, onDownload, onCancel) {
 // UI: Progress Screen
 // ============================================================================
 
-function showProgress(totalPhotos, petName, theme, onCancel) {
-  const { backdrop, card, title } = createOverlay(theme);
+function showProgress(totalPhotos, petName, theme, onCancel, resumeStartTime) {
+  const { backdrop, card, title, setEscapeHandler } = createOverlay(theme, onCancel);
 
   // Cancel button in the title row
   const cancelBtn = createButton('Cancel', theme, false, onCancel);
@@ -497,21 +504,33 @@ function showProgress(totalPhotos, petName, theme, onCancel) {
 
   document.body.appendChild(backdrop);
 
-  const startTime = Date.now();
+  const startTime = resumeStartTime || Date.now();
 
   return {
     backdrop,
-    update(downloaded, downloadedBytes) {
+    update(downloaded, downloadedBytes, fetchCount, totalFetchTime) {
       const pct = Math.round((downloaded / totalPhotos) * 100);
       barInner.style.width = pct + '%';
       countText.textContent = `${downloaded} / ${totalPhotos}`;
 
       const dlMB = (downloadedBytes / (1024 * 1024)).toFixed(1);
-      const estMB = (totalPhotos * EST_AVG_PHOTO_MB).toFixed(0);
+      let estMB;
+      if (fetchCount >= MIN_SAMPLES) {
+        estMB = ((downloadedBytes / fetchCount) * totalPhotos / (1024 * 1024)).toFixed(0);
+      } else {
+        estMB = (totalPhotos * EST_AVG_PHOTO_MB).toFixed(0);
+      }
       detailText.textContent = `${dlMB} MB downloaded (~${estMB} MB estimated)`;
 
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      elapsedText.textContent = `Elapsed: ${formatElapsed(elapsed)}`;
+      let timeStr = `Elapsed: ${formatElapsed(elapsed)}`;
+      if (fetchCount >= MIN_SAMPLES && downloaded < totalPhotos) {
+        const avgMs = totalFetchTime / fetchCount;
+        const remaining = totalPhotos - downloaded;
+        const estSec = Math.ceil((remaining * avgMs) / (CONCURRENCY * 1000));
+        timeStr += ` -- ~${formatElapsed(estSec)} remaining`;
+      }
+      elapsedText.textContent = timeStr;
     },
     setStatus(text) {
       status.textContent = text;
@@ -523,6 +542,7 @@ function showProgress(totalPhotos, petName, theme, onCancel) {
       cancelBtn.disabled = true;
       cancelBtn.style.opacity = '0.5';
       cancelBtn.style.cursor = 'default';
+      setEscapeHandler(() => {});
     },
     showOK() {
       cancelBtn.remove();
@@ -533,6 +553,96 @@ function showProgress(totalPhotos, petName, theme, onCancel) {
       okBtn.style.padding = '6px 14px';
       okBtn.style.fontSize = '13px';
       card.appendChild(okBtn);
+      setEscapeHandler(() => backdrop.remove());
+    },
+    showCancelConfirm(collected, total, onContinue, onDownload, onDiscard) {
+      // Dim overlay covers progress content
+      const dim = el('div', {
+        position: 'absolute',
+        top: '0',
+        left: '0',
+        width: '100%',
+        height: '100%',
+        backgroundColor: 'rgba(0,0,0,0.2)',
+        borderRadius: '12px',
+        zIndex: '1',
+      });
+      card.appendChild(dim);
+
+      // Compact confirmation popup
+      const popup = el('div', {
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        backgroundColor: theme.bg,
+        borderRadius: '10px',
+        padding: '20px 24px',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+        border: `1px solid ${theme.border}`,
+        zIndex: '2',
+        width: '80%',
+        maxWidth: '340px',
+        boxSizing: 'border-box',
+      });
+
+      const xBtn = el('button', {
+        position: 'absolute',
+        top: '8px',
+        right: '10px',
+        background: 'none',
+        border: 'none',
+        fontSize: '20px',
+        lineHeight: '1',
+        cursor: 'pointer',
+        color: theme.textSecondary,
+        padding: '2px 6px',
+        fontFamily: 'inherit',
+      }, { textContent: '\u00d7', 'aria-label': 'Resume download' });
+      xBtn.addEventListener('click', doResume);
+      popup.appendChild(xBtn);
+
+      const msg = el('div', {
+        marginBottom: '16px',
+        marginRight: '20px',
+        fontSize: '14px',
+        lineHeight: '1.4',
+      });
+      msg.textContent = `${collected} of ${total} photos collected.`;
+      popup.appendChild(msg);
+
+      const btnRow = el('div', { display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' });
+
+      const discardBtn = createButton('Discard', theme, false, onDiscard);
+      discardBtn.style.padding = '7px 14px';
+      discardBtn.style.fontSize = '13px';
+
+      const dlBtn = createButton(`Download ${collected}`, theme, false, () => {
+        dim.remove();
+        popup.remove();
+        onDownload();
+      });
+      dlBtn.style.padding = '7px 14px';
+      dlBtn.style.fontSize = '13px';
+
+      const contBtn = createButton('Continue', theme, true, doResume);
+      contBtn.style.padding = '7px 14px';
+      contBtn.style.fontSize = '13px';
+
+      btnRow.appendChild(discardBtn);
+      btnRow.appendChild(dlBtn);
+      btnRow.appendChild(contBtn);
+      popup.appendChild(btnRow);
+
+      card.appendChild(popup);
+      setEscapeHandler(doResume);
+
+      function doResume() {
+        dim.remove();
+        popup.remove();
+        setEscapeHandler(onCancel);
+        onContinue();
+      }
     },
   };
 }
@@ -553,45 +663,6 @@ function showError(message, theme) {
   const btnRow = el('div', { display: 'flex', justifyContent: 'flex-end' });
   const okBtn = createButton('OK', theme, true, () => backdrop.remove());
   btnRow.appendChild(okBtn);
-  card.appendChild(btnRow);
-
-  document.body.appendChild(backdrop);
-}
-
-// ============================================================================
-// UI: Partial Download Offer
-// ============================================================================
-
-function showPartialOffer(collectedBlobs, photos, petName, theme) {
-  const { backdrop, card } = createOverlay(theme);
-
-  const msg = el('div', {
-    marginBottom: '20px',
-    fontSize: '15px',
-  });
-  msg.textContent = `Download cancelled. ${collectedBlobs.length} of ${photos.length} photos were collected.`;
-  card.appendChild(msg);
-
-  const btnRow = el('div', { display: 'flex', gap: '12px', justifyContent: 'flex-end' });
-
-  const discardBtn = createButton('Discard', theme, false, () => backdrop.remove());
-  const downloadBtn = createButton(`Download ${collectedBlobs.length} photos`, theme, true, async () => {
-    btnRow.remove();
-    msg.textContent = 'Building zip...';
-    try {
-      const zipSize = await buildAndDownloadZip(collectedBlobs, petName, theme, null);
-      const zipMB = (zipSize / (1024 * 1024)).toFixed(1);
-      msg.textContent = `Done! ${collectedBlobs.length} photos downloaded \u2014 ${zipMB} MB`;
-    } catch (e) {
-      msg.textContent = 'Failed to build zip: ' + e.message;
-    }
-    const okBtn = createButton('OK', theme, true, () => backdrop.remove());
-    card.appendChild(el('div', { display: 'flex', justifyContent: 'flex-end' }));
-    card.lastChild.appendChild(okBtn);
-  });
-
-  btnRow.appendChild(discardBtn);
-  btnRow.appendChild(downloadBtn);
   card.appendChild(btnRow);
 
   document.body.appendChild(backdrop);
@@ -651,73 +722,130 @@ async function downloadPhotos(photos, petName, theme, confirmBackdrop) {
   // Remove confirmation screen
   if (confirmBackdrop) confirmBackdrop.remove();
 
-  const controller = new AbortController();
+  let controller = new AbortController();
   let cancelled = false;
-
-  const progress = showProgress(photos.length, petName, theme, () => {
-    cancelled = true;
-    controller.abort();
-  });
-
   const blobs = [];
   let totalBytes = 0;
   let failCount = 0;
+  let totalFetchTime = 0;
+  let fetchCount = 0;
+  const completedIndices = new Set();
+  const overallStartTime = Date.now();
 
-  for (let i = 0; i < photos.length; i++) {
-    if (cancelled) break;
+  function handleCancel() {
+    cancelled = true;
+    controller.abort();
+  }
 
-    const photo = photos[i];
-    const url = getFullQualityUrl(photo);
-    if (!url) {
-      failCount++;
-      progress.update(i + 1, totalBytes);
-      continue;
+  const progress = showProgress(photos.length, petName, theme, handleCancel, overallStartTime);
+
+  async function run() {
+    cancelled = false;
+    controller = new AbortController();
+
+    // Show current state if resuming
+    if (completedIndices.size > 0) {
+      progress.update(completedIndices.size, totalBytes, fetchCount, totalFetchTime);
     }
 
-    try {
-      const res = await fetch(url, { signal: controller.signal });
-      if (!res.ok) {
-        failCount++;
-        progress.update(i + 1, totalBytes);
-        continue;
+    // Build queue of remaining indices
+    const queue = [];
+    for (let idx = 0; idx < photos.length; idx++) {
+      if (!completedIndices.has(idx)) queue.push(idx);
+    }
+    let queuePos = 0;
+
+    async function worker() {
+      while (!cancelled && queuePos < queue.length) {
+        const idx = queue[queuePos++];
+        const photo = photos[idx];
+        const url = getFullQualityUrl(photo);
+        if (!url) {
+          failCount++;
+          completedIndices.add(idx);
+          progress.update(completedIndices.size, totalBytes, fetchCount, totalFetchTime);
+          continue;
+        }
+
+        try {
+          const t0 = Date.now();
+          const res = await fetch(url, { signal: controller.signal });
+          if (!res.ok) {
+            failCount++;
+            completedIndices.add(idx);
+            progress.update(completedIndices.size, totalBytes, fetchCount, totalFetchTime);
+            continue;
+          }
+          const blob = await res.blob();
+          totalFetchTime += Date.now() - t0;
+          fetchCount++;
+          totalBytes += blob.size;
+          const photoDate = parseDate(photo.added);
+          blobs.push({ blob, date: photoDate, id: photo.pk || photo.id || idx, sortIdx: idx });
+          completedIndices.add(idx);
+        } catch (e) {
+          if (e.name === 'AbortError') break;
+          failCount++;
+          completedIndices.add(idx);
+        }
+
+        progress.update(completedIndices.size, totalBytes, fetchCount, totalFetchTime);
       }
-      const blob = await res.blob();
-      totalBytes += blob.size;
-      const photoDate = parseDate(photo.added);
-      blobs.push({ blob, date: photoDate, id: photo.pk || photo.id || i });
+    }
+
+    await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+
+    // Handle cancel
+    if (cancelled) {
+      if (blobs.length > 0) {
+        progress.showCancelConfirm(
+          blobs.length,
+          photos.length,
+          run,
+          downloadPartial,
+          () => progress.backdrop.remove(),
+        );
+      } else {
+        progress.backdrop.remove();
+      }
+      return;
+    }
+
+    // Sort by original photo order before zipping
+    blobs.sort((a, b) => a.sortIdx - b.sortIdx);
+
+    // Build zip and download
+    try {
+      const zipSize = await buildAndDownloadZip(blobs, petName, theme, progress);
+      const zipMB = (zipSize / (1024 * 1024)).toFixed(1);
+
+      if (failCount > 0) {
+        progress.setStatus(`Done! ${blobs.length} of ${photos.length} photos (${failCount} failed) \u2014 ${zipMB} MB`);
+      } else {
+        progress.setStatus(`Done! ${blobs.length} photos downloaded \u2014 ${zipMB} MB`);
+      }
+
+      progress.showOK();
     } catch (e) {
-      if (e.name === 'AbortError') break;
-      failCount++;
+      progress.setStatus('Failed to build zip: ' + e.message);
+      progress.showOK();
     }
-
-    progress.update(i + 1, totalBytes);
   }
 
-  // Handle cancel
-  if (cancelled) {
-    progress.backdrop.remove();
-    if (blobs.length > 0) {
-      showPartialOffer(blobs, photos, petName, theme);
-    }
-    return;
-  }
-
-  // Build zip and download
-  try {
-    const zipSize = await buildAndDownloadZip(blobs, petName, theme, progress);
-    const zipMB = (zipSize / (1024 * 1024)).toFixed(1);
-
-    if (failCount > 0) {
-      progress.setStatus(`Done! ${blobs.length} of ${photos.length} photos (${failCount} failed) \u2014 ${zipMB} MB`);
-    } else {
+  async function downloadPartial() {
+    const sorted = blobs.slice().sort((a, b) => a.sortIdx - b.sortIdx);
+    try {
+      const zipSize = await buildAndDownloadZip(sorted, petName, theme, progress);
+      const zipMB = (zipSize / (1024 * 1024)).toFixed(1);
       progress.setStatus(`Done! ${blobs.length} photos downloaded \u2014 ${zipMB} MB`);
+      progress.showOK();
+    } catch (e) {
+      progress.setStatus('Failed to build zip: ' + e.message);
+      progress.showOK();
     }
-
-    progress.showOK();
-  } catch (e) {
-    progress.setStatus('Failed to build zip: ' + e.message);
-    progress.showOK();
   }
+
+  await run();
 }
 
 // ============================================================================
@@ -725,6 +853,8 @@ async function downloadPhotos(photos, petName, theme, confirmBackdrop) {
 // ============================================================================
 
 (async function main() {
+  if (document.querySelector('[data-rover-dumper]')) return;
+
   const theme = getTheme();
 
   // Validate we're on a pet profile page

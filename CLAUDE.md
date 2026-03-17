@@ -40,7 +40,7 @@ The build has several layers to make bookmarklets work correctly in browser book
 - Bookmarklet href in index.html is between `<!-- BOOKMARKLET_START -->` and `<!-- BOOKMARKLET_END -->` marker comments
 - API endpoint: `/api/v7/pets/{opk}/images/` (not `/images-cached/`; the non-cached endpoint respects `page_size`)
 - Image URL strategy: strip all query params from any available URL field (bare URL returns the original)
-- Sequential image fetches (not parallel) to avoid rate limiting
+- Limited parallel image fetches (CONCURRENCY = 3) to balance speed vs rate-limiting risk
 - Zip uses `compression: 'STORE'` since JPEGs are already compressed
 - Copy button decodes `%25` back to `%` so manual-paste installation gets raw JS
 

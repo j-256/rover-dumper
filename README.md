@@ -13,7 +13,7 @@ Rover.com has no bulk photo download. You can only view photos one at a time in 
 1. Extracts the pet's opk (identifier) from the `/dogs/{opk}/` URL path
 2. Paginates `/api/v7/pets/{opk}/images/` to collect all photo metadata
 3. Shows a confirmation modal with photo count, date range, and filter controls
-4. Downloads each photo sequentially (no parallel fetches — avoids rate limiting)
+4. Downloads photos in parallel (concurrency: 3 workers — balances speed vs rate-limiting)
 5. Strips CDN query params from image URLs to get the original full-quality file
 6. Builds a zip in-memory using [JSZip](https://stuk.github.io/jszip/) with `STORE` compression (JPEGs are already compressed)
 7. Triggers a browser download via Blob URL
