@@ -43,6 +43,14 @@ The build has several layers to make bookmarklets work correctly in browser book
 - Limited parallel image fetches (CONCURRENCY = 3) to balance speed vs rate-limiting risk
 - Zip uses `compression: 'STORE'` since JPEGs are already compressed
 - Copy button decodes `%25` back to `%` so manual-paste installation gets raw JS
+- After feature changes, review and update README.md "How It Works" section and index.html descriptions to match implementation
+
+## Commit Style
+
+- Descriptive header summarizing the change (not just the filename)
+- Bullet points for details
+- Function-level changes: `functionName(): Description`
+- Group by logical change, not by file
 
 ## GitHub
 
