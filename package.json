@@ -1,6 +1,6 @@
 {
   "name": "rover-dumper",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Bulk download your pet's photos from Rover.com",
   "type": "module",
   "private": true,
