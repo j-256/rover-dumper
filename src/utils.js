@@ -2,6 +2,12 @@
 // Configuration (retry)
 // ============================================================================
 
+export const ErrorCategory = Object.freeze({
+  PERMANENT: 'permanent',
+  RATE_LIMITED: 'rate-limited',
+  TRANSIENT: 'transient',
+});
+
 export const RETRY_PHASE_BACKOFF = [2000, 4000, 8000, 16000, 32000];
 
 // ============================================================================
@@ -26,17 +32,17 @@ export function classifyError(error, res) {
   if (res) {
     const s = res.status;
     if (s === 400 || s === 403 || s === 404 || s === 410) {
-      return { category: 'permanent', retryAfterMs: null };
+      return { category: ErrorCategory.PERMANENT, retryAfterMs: null };
     }
     if (s === 429 || (s === 503 && res.headers.get('Retry-After'))) {
       const retryAfterMs = parseRetryAfter(res) || RETRY_PHASE_BACKOFF[0];
-      return { category: 'rate-limited', retryAfterMs };
+      return { category: ErrorCategory.RATE_LIMITED, retryAfterMs };
     }
     if (s >= 500) {
-      return { category: 'transient', retryAfterMs: null };
+      return { category: ErrorCategory.TRANSIENT, retryAfterMs: null };
     }
   }
-  return { category: 'transient', retryAfterMs: null };
+  return { category: ErrorCategory.TRANSIENT, retryAfterMs: null };
 }
 
 export function sleep(ms, signal) {

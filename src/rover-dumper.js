@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import {
+  ErrorCategory,
   RETRY_PHASE_BACKOFF,
   classifyError,
   sleep,
@@ -98,11 +99,11 @@ async function fetchAllMetadata(opk, signal, onProgress, onRetry) {
         const res = e.response || null;
         const { category, retryAfterMs } = classifyError(e.error || e, res);
 
-        if (category === 'permanent') break;
+        if (category === ErrorCategory.PERMANENT) break;
 
         if (attempt < 2) {
           let delayMs;
-          if (category === 'rate-limited' && retryAfterMs) {
+          if (category === ErrorCategory.RATE_LIMITED && retryAfterMs) {
             delayMs = Math.min(retryAfterMs, MAX_RETRY_AFTER_MS);
           } else {
             delayMs = INLINE_BACKOFF[attempt];
@@ -803,8 +804,8 @@ async function downloadPhotos(photos, petName, theme, confirmBackdrop) {
     const photo = photos[idx];
     const url = getFullQualityUrl(photo);
     if (!url) {
-      const track = trackError(idx, null, 'permanent');
-      track.finalCategory = 'permanent';
+      const track = trackError(idx, null, ErrorCategory.PERMANENT);
+      track.finalCategory = ErrorCategory.PERMANENT;
       completedIndices.add(idx);
       return null;
     }
@@ -876,15 +877,15 @@ async function downloadPhotos(photos, petName, theme, confirmBackdrop) {
           const status = result.response ? result.response.status : 'network';
           const track = trackError(idx, status, category);
 
-          if (category === 'permanent') {
-            track.finalCategory = 'permanent';
+          if (category === ErrorCategory.PERMANENT) {
+            track.finalCategory = ErrorCategory.PERMANENT;
             completedIndices.add(idx);
             succeeded = true;
             updateProgress();
             break;
           }
 
-          if (category === 'rate-limited') {
+          if (category === ErrorCategory.RATE_LIMITED) {
             track.eligibleAt = Date.now() + (retryAfterMs || RETRY_PHASE_BACKOFF[0]);
             retryQueue.push(idx);
             succeeded = true;
@@ -966,7 +967,7 @@ async function downloadPhotos(photos, petName, theme, confirmBackdrop) {
       }
 
       if (result === null) {
-        track.finalCategory = 'permanent';
+        track.finalCategory = ErrorCategory.PERMANENT;
         completedIndices.add(idx);
         i++;
         updateProgress();
@@ -991,8 +992,8 @@ async function downloadPhotos(photos, petName, theme, confirmBackdrop) {
       const status = result.response ? result.response.status : 'network';
       trackError(idx, status, category);
 
-      if (category === 'permanent') {
-        track.finalCategory = 'permanent';
+      if (category === ErrorCategory.PERMANENT) {
+        track.finalCategory = ErrorCategory.PERMANENT;
         completedIndices.add(idx);
         i++;
         updateProgress();
@@ -1013,7 +1014,7 @@ async function downloadPhotos(photos, petName, theme, confirmBackdrop) {
       }
 
       // Still retryable -- update eligibility and move to end
-      if (category === 'rate-limited' && retryAfterMs) {
+      if (category === ErrorCategory.RATE_LIMITED && retryAfterMs) {
         track.eligibleAt = Date.now() + retryAfterMs;
       } else {
         const backoffIdx = Math.min(retryPhaseAttempt, RETRY_PHASE_BACKOFF.length - 1);
@@ -1026,7 +1027,7 @@ async function downloadPhotos(photos, petName, theme, confirmBackdrop) {
     for (let j = i; j < retryQueue.length; j++) {
       const track = errorTracks.get(retryQueue[j]);
       if (track && !track.finalCategory) {
-        track.finalCategory = track.attempts.length > 0 ? track.attempts[track.attempts.length - 1].category : 'transient';
+        track.finalCategory = track.attempts.length > 0 ? track.attempts[track.attempts.length - 1].category : ErrorCategory.TRANSIENT;
         completedIndices.add(retryQueue[j]);
       }
     }

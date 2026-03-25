@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  ErrorCategory,
   classifyError,
   parseRetryAfter,
   getErrorMessage,
@@ -26,41 +27,41 @@ function mockRes(status, headers = {}) {
 describe('classifyError', () => {
   it('classifies 404 as permanent', () => {
     const { category } = classifyError(null, mockRes(404));
-    assert.equal(category, 'permanent');
+    assert.equal(category, ErrorCategory.PERMANENT);
   });
 
   it('classifies 400, 403, 410 as permanent', () => {
     for (const status of [400, 403, 410]) {
       const { category } = classifyError(null, mockRes(status));
-      assert.equal(category, 'permanent', 'status ' + status);
+      assert.equal(category, ErrorCategory.PERMANENT, 'status ' + status);
     }
   });
 
   it('classifies 429 as rate-limited', () => {
     const { category } = classifyError(null, mockRes(429));
-    assert.equal(category, 'rate-limited');
+    assert.equal(category, ErrorCategory.RATE_LIMITED);
   });
 
   it('classifies 503 with Retry-After as rate-limited', () => {
     const { category } = classifyError(null, mockRes(503, { 'Retry-After': '30' }));
-    assert.equal(category, 'rate-limited');
+    assert.equal(category, ErrorCategory.RATE_LIMITED);
   });
 
   it('classifies 503 without Retry-After as transient', () => {
     const { category } = classifyError(null, mockRes(503));
-    assert.equal(category, 'transient');
+    assert.equal(category, ErrorCategory.TRANSIENT);
   });
 
   it('classifies 500, 502, 504 as transient', () => {
     for (const status of [500, 502, 504]) {
       const { category } = classifyError(null, mockRes(status));
-      assert.equal(category, 'transient', 'status ' + status);
+      assert.equal(category, ErrorCategory.TRANSIENT, 'status ' + status);
     }
   });
 
   it('classifies network errors (no response) as transient', () => {
     const { category } = classifyError(new Error('network'), null);
-    assert.equal(category, 'transient');
+    assert.equal(category, ErrorCategory.TRANSIENT);
   });
 
   it('returns retryAfterMs for 429 with Retry-After header', () => {
@@ -132,36 +133,36 @@ describe('parseRetryAfter', () => {
 
 describe('getErrorMessage', () => {
   it('returns message for null status (no URL)', () => {
-    const track = { attempts: [{ status: null, category: 'permanent' }] };
+    const track = { attempts: [{ status: null, category: ErrorCategory.PERMANENT }] };
     assert.equal(getErrorMessage(track), 'No image URL available');
   });
 
   it('returns message for 404', () => {
-    const track = { attempts: [{ status: 404, category: 'permanent' }] };
+    const track = { attempts: [{ status: 404, category: ErrorCategory.PERMANENT }] };
     assert.match(getErrorMessage(track), /Not found \(404\)/);
   });
 
   it('returns message for 410', () => {
-    const track = { attempts: [{ status: 410, category: 'permanent' }] };
+    const track = { attempts: [{ status: 410, category: ErrorCategory.PERMANENT }] };
     assert.match(getErrorMessage(track), /Gone \(410\)/);
   });
 
   it('returns message for 403', () => {
-    const track = { attempts: [{ status: 403, category: 'permanent' }] };
+    const track = { attempts: [{ status: 403, category: ErrorCategory.PERMANENT }] };
     assert.match(getErrorMessage(track), /Access denied \(403\)/);
   });
 
   it('returns message for 500 with attempt count', () => {
     const track = { attempts: [
-      { status: 500, category: 'transient' },
-      { status: 500, category: 'transient' },
-      { status: 500, category: 'transient' },
+      { status: 500, category: ErrorCategory.TRANSIENT },
+      { status: 500, category: ErrorCategory.TRANSIENT },
+      { status: 500, category: ErrorCategory.TRANSIENT },
     ]};
     assert.match(getErrorMessage(track), /Server error \(500\) -- failed after 3 attempts/);
   });
 
   it('returns message for network error', () => {
-    const track = { attempts: [{ status: 'network', category: 'transient' }] };
+    const track = { attempts: [{ status: 'network', category: ErrorCategory.TRANSIENT }] };
     assert.match(getErrorMessage(track), /Network error/);
   });
 
@@ -171,8 +172,8 @@ describe('getErrorMessage', () => {
 
   it('uses last attempt for message', () => {
     const track = { attempts: [
-      { status: 500, category: 'transient' },
-      { status: 404, category: 'permanent' },
+      { status: 500, category: ErrorCategory.TRANSIENT },
+      { status: 404, category: ErrorCategory.PERMANENT },
     ]};
     assert.match(getErrorMessage(track), /Not found \(404\)/);
   });
