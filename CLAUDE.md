@@ -8,6 +8,7 @@ Rover Dumper is a browser bookmarklet that bulk-downloads pet photos from Rover.
 
 ```bash
 npm install                       # Install dependencies (jszip + esbuild)
+npm run setup                     # Enable pre-commit auto-build hook
 npm run build                     # Bundle + minify src -> dist, update index.html
 npm version <major|minor|patch>   # Bump version, rebuild, commit + tag
 ```
@@ -36,7 +37,7 @@ The build has several layers to make bookmarklets work correctly in browser book
 
 ## Hooks
 
-A pre-commit hook in `hooks/pre-commit` auto-rebuilds and stages `dist/` and `index.html` when `src/` changes are committed. Enabled via `git config core.hooksPath hooks`. Never skip with `--no-verify` -- the build output must stay in sync with source since GitHub Pages serves it directly.
+A pre-commit hook in `hooks/pre-commit` auto-rebuilds and stages `dist/` and `index.html` when `src/` changes are committed. Enabled via `npm run setup`. Never skip with `--no-verify` -- the build output must stay in sync with source since GitHub Pages serves it directly.
 
 ## Conventions
 

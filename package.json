@@ -7,6 +7,7 @@
   "homepage": "https://rover-dumper.jklein.dev/",
   "repository": "j-256/rover-dumper",
   "scripts": {
+    "setup": "git config core.hooksPath hooks",
     "build": "./build.sh",
     "test": "node --test 'test/**/*.test.js'",
     "version": "npm run build && git add dist/ index.html"
