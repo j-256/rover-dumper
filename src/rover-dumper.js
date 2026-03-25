@@ -8,6 +8,11 @@ const PAGE_SIZE = 100; // request large pages; server may cap lower
 const EST_AVG_PHOTO_MB = 1.4; // derived from real Rover photo data
 const MIN_SAMPLES = 10; // minimum fetch samples before using running averages
 const CONCURRENCY = 3; // parallel image fetches
+const MAX_INLINE_RETRIES = 2; // retries per photo during initial pass (transient only)
+const MAX_TOTAL_ATTEMPTS = 5; // across both phases
+const INLINE_BACKOFF = [1000, 2000]; // ms delays for inline retries
+const RETRY_PHASE_BACKOFF = [2000, 4000, 8000, 16000, 32000]; // ms delays for retry phase
+const MAX_RETRY_AFTER_MS = 60000; // cap Retry-After at 60s (metadata only)
 
 // ============================================================================
 // URL Validation & Pet Identification
@@ -58,6 +63,66 @@ async function fetchPage(opk, pageNum, signal) {
     throw new Error(`API error: ${res.status}`);
   }
   return res.json();
+}
+
+// ============================================================================
+// Error Classification & Retry Helpers
+// ============================================================================
+
+function parseRetryAfter(res) {
+  if (!res || !res.headers) return null;
+  const val = res.headers.get('Retry-After');
+  if (!val) return null;
+  const seconds = Number(val);
+  if (!isNaN(seconds) && seconds > 0) return seconds * 1000;
+  const date = Date.parse(val);
+  if (!isNaN(date)) {
+    const ms = date - Date.now();
+    return ms > 0 ? ms : null;
+  }
+  return null;
+}
+
+function classifyError(error, res) {
+  if (res) {
+    const s = res.status;
+    if (s === 400 || s === 403 || s === 404 || s === 410) {
+      return { category: 'permanent', retryAfterMs: null };
+    }
+    if (s === 429 || (s === 503 && res.headers.get('Retry-After'))) {
+      const retryAfterMs = parseRetryAfter(res) || RETRY_PHASE_BACKOFF[0];
+      return { category: 'rate-limited', retryAfterMs };
+    }
+    if (s >= 500) {
+      return { category: 'transient', retryAfterMs: null };
+    }
+  }
+  return { category: 'transient', retryAfterMs: null };
+}
+
+function sleep(ms, signal) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    if (signal) {
+      if (signal.aborted) { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); return; }
+      const onAbort = () => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); };
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
+}
+
+function getErrorMessage(track) {
+  const last = track.attempts[track.attempts.length - 1];
+  if (!last) return 'Unknown error';
+  const s = last.status;
+  const n = track.attempts.length;
+  if (s === null) return 'No image URL available';
+  if (s === 404) return 'Not found (404) -- photos may have been deleted';
+  if (s === 410) return 'Gone (410) -- photos have been removed';
+  if (s === 400 || s === 403) return 'Access denied (' + s + ')';
+  if (s === 'network') return 'Network error -- failed after ' + n + ' attempts';
+  if (typeof s === 'number' && s >= 500) return 'Server error (' + s + ') -- failed after ' + n + ' attempts';
+  return 'Error (' + s + ') -- failed after ' + n + ' attempts';
 }
 
 // ============================================================================
