@@ -24,6 +24,8 @@ const MAX_INLINE_RETRIES = 2; // retries per photo during initial pass (transien
 const MAX_TOTAL_ATTEMPTS = 5; // across both phases
 const INLINE_BACKOFF = [1000, 2000]; // ms delays for inline retries
 const MAX_RETRY_AFTER_MS = 60000; // cap Retry-After at 60s (metadata only)
+const ERR_AUTH = 'AUTH';
+const ERR_NO_PHOTOS = 'NO_PHOTOS';
 
 // ============================================================================
 // URL Validation & Pet Identification
@@ -74,7 +76,7 @@ async function fetchPage(opk, pageNum, signal) {
   }
 
   if (res.status === 401 || res.status === 403) {
-    throw new Error('AUTH');
+    throw new Error(ERR_AUTH);
   }
   if (!res.ok) {
     throw { error: new Error('API error: ' + res.status), response: res };
@@ -94,7 +96,7 @@ async function fetchAllMetadata(opk, signal, onProgress, onRetry) {
         return await fetchPage(opk, pageNum, signal);
       } catch (e) {
         if (e.name === 'AbortError') throw e;
-        if (e instanceof Error && e.message === 'AUTH') throw e;
+        if (e instanceof Error && e.message === ERR_AUTH) throw e;
 
         const res = e.response || null;
         const { category, retryAfterMs } = classifyError(e.error || e, res);
@@ -121,7 +123,7 @@ async function fetchAllMetadata(opk, signal, onProgress, onRetry) {
   const total = first.count;
 
   if (total === 0) {
-    throw new Error('NO_PHOTOS');
+    throw new Error(ERR_NO_PHOTOS);
   }
 
   const photos = first.results.slice();
@@ -1159,9 +1161,9 @@ async function downloadPhotos(photos, petName, theme, confirmBackdrop) {
   } catch (e) {
     loadingBackdrop.remove();
 
-    if (e.message === 'AUTH') {
+    if (e.message === ERR_AUTH) {
       showError('Please log into Rover.com and try again.', theme);
-    } else if (e.message === 'NO_PHOTOS') {
+    } else if (e.message === ERR_NO_PHOTOS) {
       const displayName = petName ? petName.charAt(0).toUpperCase() + petName.slice(1) : 'this pet';
       showError(`No photos found for ${displayName}.`, theme);
     } else {
