@@ -22,7 +22,7 @@ npx esbuild src/rover-dumper.js \
   --outfile=dist/rover-dumper.bundle.js
 
 # Prepend bookmarklet prefix, collapse to a single line, write final output
-printf '%s' "javascript:/*${version}*/" > dist/rover-dumper.min.js
+printf '%s' "javascript:/*rover-dumper@${version}*/" > dist/rover-dumper.min.js
 tr -d '\n' < dist/rover-dumper.bundle.js >> dist/rover-dumper.min.js
 rm dist/rover-dumper.bundle.js
 
