@@ -776,7 +776,7 @@ async function buildAndDownloadZip(blobs, petName, theme, progress) {
 
   for (let i = 0; i < blobs.length; i++) {
     const { blob, date, id } = blobs[i];
-    const num = String(i + 1).padStart(4, '0');
+    const num = String(blobs[i].sortIdx + 1).padStart(4, '0');
     const dateStr = date ? formatDateISO(date) : 'unknown';
     const filename = `${name}_${num}_${dateStr}_${id}.jpg`;
     zip.file(filename, blob);
