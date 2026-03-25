@@ -606,10 +606,10 @@ function showProgress(totalPhotos, petName, theme, onCancel, resumeStartTime) {
 
   return {
     backdrop,
-    update(downloaded, downloadedBytes, fetchCount, totalFetchTime) {
+    update(downloaded, downloadedBytes, fetchCount, totalFetchTime, failCount) {
       const pct = Math.round((downloaded / totalPhotos) * 100);
       barInner.style.width = pct + '%';
-      countText.textContent = `${downloaded} / ${totalPhotos}`;
+      countText.textContent = downloaded + ' / ' + totalPhotos + (failCount > 0 ? ' (' + failCount + ' failed)' : '');
 
       const dlMB = (downloadedBytes / (1024 * 1024)).toFixed(1);
       let estMB;
@@ -653,7 +653,7 @@ function showProgress(totalPhotos, petName, theme, onCancel, resumeStartTime) {
       card.appendChild(okBtn);
       setEscapeHandler(() => backdrop.remove());
     },
-    showCancelConfirm(collected, total, onContinue, onDownload, onDiscard) {
+    showCancelConfirm(collected, total, failCount, onContinue, onDownload, onDiscard) {
       // Dim overlay covers progress content
       const dim = el('div', {
         position: 'absolute',
@@ -706,7 +706,7 @@ function showProgress(totalPhotos, petName, theme, onCancel, resumeStartTime) {
         fontSize: '14px',
         lineHeight: '1.4',
       });
-      msg.textContent = `${collected} of ${total} photos collected.`;
+      msg.textContent = collected + ' of ' + total + ' photos collected.' + (failCount > 0 ? ' (' + failCount + ' failed)' : '');
       popup.appendChild(msg);
 
       const btnRow = el('div', { display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' });
@@ -741,6 +741,43 @@ function showProgress(totalPhotos, petName, theme, onCancel, resumeStartTime) {
         setEscapeHandler(onCancel);
         onContinue();
       }
+    },
+    showFailureReport(errorTracks) {
+      const failed = [...errorTracks.values()].filter(t => t.finalCategory);
+      if (failed.length === 0) return;
+
+      const groups = new Map();
+      for (const track of failed) {
+        const msg = getErrorMessage(track);
+        if (!groups.has(msg)) groups.set(msg, []);
+        groups.get(msg).push('#' + String(track.photoIndex + 1).padStart(4, '0'));
+      }
+
+      const details = el('details', {
+        marginTop: '12px',
+        fontSize: '13px',
+        color: theme.textSecondary,
+        cursor: 'pointer',
+      });
+
+      const summaryEl = document.createElement('summary');
+      summaryEl.style.fontWeight = '600';
+      summaryEl.style.marginBottom = '8px';
+      summaryEl.textContent = failed.length + ' photo' + (failed.length === 1 ? '' : 's') + ' failed permanently';
+      details.appendChild(summaryEl);
+
+      for (const [msg, indices] of groups) {
+        const groupDiv = el('div', { marginBottom: '8px', paddingLeft: '8px' });
+        const label = el('div', { fontWeight: '600' });
+        label.textContent = indices.length + ' x ' + msg;
+        groupDiv.appendChild(label);
+        const idxDiv = el('div', { paddingLeft: '8px', wordBreak: 'break-word' });
+        idxDiv.textContent = indices.join(', ');
+        groupDiv.appendChild(idxDiv);
+        details.appendChild(groupDiv);
+      }
+
+      card.appendChild(details);
     },
   };
 }
@@ -817,18 +854,35 @@ async function buildAndDownloadZip(blobs, petName, theme, progress) {
 // ============================================================================
 
 async function downloadPhotos(photos, petName, theme, confirmBackdrop) {
-  // Remove confirmation screen
   if (confirmBackdrop) confirmBackdrop.remove();
 
   let controller = new AbortController();
   let cancelled = false;
   const blobs = [];
   let totalBytes = 0;
-  let failCount = 0;
   let totalFetchTime = 0;
   let fetchCount = 0;
   const completedIndices = new Set();
+  const errorTracks = new Map();
+  const retryQueue = [];
   const overallStartTime = Date.now();
+
+  function trackError(idx, status, category) {
+    if (!errorTracks.has(idx)) {
+      errorTracks.set(idx, { photoIndex: idx, attempts: [], finalCategory: null, eligibleAt: null });
+    }
+    const track = errorTracks.get(idx);
+    track.attempts.push({ status, category, timestamp: Date.now() });
+    return track;
+  }
+
+  function getFailCount() {
+    let count = 0;
+    for (const track of errorTracks.values()) {
+      if (!completedIndices.has(track.photoIndex) || track.finalCategory) count++;
+    }
+    return count;
+  }
 
   function handleCancel() {
     cancelled = true;
@@ -837,16 +891,43 @@ async function downloadPhotos(photos, petName, theme, confirmBackdrop) {
 
   const progress = showProgress(photos.length, petName, theme, handleCancel, overallStartTime);
 
-  async function run() {
+  function updateProgress() {
+    progress.update(completedIndices.size, totalBytes, fetchCount, totalFetchTime, getFailCount());
+  }
+
+  async function attemptFetch(idx, signal) {
+    const photo = photos[idx];
+    const url = getFullQualityUrl(photo);
+    if (!url) {
+      const track = trackError(idx, null, 'permanent');
+      track.finalCategory = 'permanent';
+      completedIndices.add(idx);
+      return null;
+    }
+
+    const t0 = Date.now();
+    let res;
+    try {
+      res = await fetch(url, { signal });
+    } catch (e) {
+      if (e.name === 'AbortError') throw e;
+      return { ok: false, error: e, response: null, elapsed: Date.now() - t0 };
+    }
+
+    if (!res.ok) {
+      return { ok: false, error: new Error('HTTP ' + res.status), response: res, elapsed: Date.now() - t0 };
+    }
+
+    const blob = await res.blob();
+    return { ok: true, blob, response: res, elapsed: Date.now() - t0 };
+  }
+
+  async function initialPass() {
     cancelled = false;
     controller = new AbortController();
 
-    // Show current state if resuming
-    if (completedIndices.size > 0) {
-      progress.update(completedIndices.size, totalBytes, fetchCount, totalFetchTime);
-    }
+    if (completedIndices.size > 0) updateProgress();
 
-    // Build queue of remaining indices
     const queue = [];
     for (let idx = 0; idx < photos.length; idx++) {
       if (!completedIndices.has(idx)) queue.push(idx);
@@ -857,76 +938,211 @@ async function downloadPhotos(photos, petName, theme, confirmBackdrop) {
       while (!cancelled && queuePos < queue.length) {
         const idx = queue[queuePos++];
         const photo = photos[idx];
-        const url = getFullQualityUrl(photo);
-        if (!url) {
-          failCount++;
-          completedIndices.add(idx);
-          progress.update(completedIndices.size, totalBytes, fetchCount, totalFetchTime);
-          continue;
-        }
 
-        try {
-          const t0 = Date.now();
-          const res = await fetch(url, { signal: controller.signal });
-          if (!res.ok) {
-            failCount++;
-            completedIndices.add(idx);
-            progress.update(completedIndices.size, totalBytes, fetchCount, totalFetchTime);
-            continue;
+        let succeeded = false;
+        for (let attempt = 0; attempt <= MAX_INLINE_RETRIES; attempt++) {
+          let result;
+          try {
+            result = await attemptFetch(idx, controller.signal);
+          } catch (e) {
+            if (e.name === 'AbortError') { cancelled = true; return; }
+            throw e;
           }
-          const blob = await res.blob();
-          totalFetchTime += Date.now() - t0;
-          fetchCount++;
-          totalBytes += blob.size;
-          const photoDate = parseDate(photo.added);
-          blobs.push({ blob, date: photoDate, id: photo.pk || photo.id || idx, sortIdx: idx });
-          completedIndices.add(idx);
-        } catch (e) {
-          if (e.name === 'AbortError') break;
-          failCount++;
-          completedIndices.add(idx);
+
+          if (result === null) {
+            updateProgress();
+            succeeded = true;
+            break;
+          }
+
+          if (result.ok) {
+            totalFetchTime += result.elapsed;
+            fetchCount++;
+            totalBytes += result.blob.size;
+            const photoDate = parseDate(photo.added);
+            blobs.push({ blob: result.blob, date: photoDate, id: photo.pk || photo.id || idx, sortIdx: idx });
+            completedIndices.add(idx);
+            if (errorTracks.has(idx)) errorTracks.delete(idx);
+            succeeded = true;
+            updateProgress();
+            break;
+          }
+
+          const { category, retryAfterMs } = classifyError(result.error, result.response);
+          const status = result.response ? result.response.status : 'network';
+          const track = trackError(idx, status, category);
+
+          if (category === 'permanent') {
+            track.finalCategory = 'permanent';
+            completedIndices.add(idx);
+            succeeded = true;
+            updateProgress();
+            break;
+          }
+
+          if (category === 'rate-limited') {
+            track.eligibleAt = Date.now() + (retryAfterMs || RETRY_PHASE_BACKOFF[0]);
+            retryQueue.push(idx);
+            succeeded = true;
+            updateProgress();
+            break;
+          }
+
+          // Transient -- inline retry if attempts remain
+          if (attempt < MAX_INLINE_RETRIES) {
+            try {
+              await sleep(INLINE_BACKOFF[attempt], controller.signal);
+            } catch (e) {
+              if (e.name === 'AbortError') { cancelled = true; return; }
+            }
+          } else {
+            retryQueue.push(idx);
+            succeeded = true;
+            updateProgress();
+          }
         }
 
-        progress.update(completedIndices.size, totalBytes, fetchCount, totalFetchTime);
+        if (!succeeded) updateProgress();
       }
     }
 
     await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+  }
 
-    // Handle cancel
-    if (cancelled) {
-      if (blobs.length > 0) {
-        progress.showCancelConfirm(
-          blobs.length,
-          photos.length,
-          run,
-          downloadPartial,
-          () => progress.backdrop.remove(),
-        );
-      } else {
-        progress.backdrop.remove();
+  async function retryPhase() {
+    if (retryQueue.length === 0) return;
+
+    cancelled = false;
+    controller = new AbortController();
+
+    retryQueue.sort((a, b) => {
+      const aTime = (errorTracks.get(a) || {}).eligibleAt || 0;
+      const bTime = (errorTracks.get(b) || {}).eligibleAt || 0;
+      return aTime - bTime;
+    });
+
+    progress.setStatus('Retrying ' + retryQueue.length + ' photos...');
+
+    let i = 0;
+    while (!cancelled && i < retryQueue.length) {
+      const idx = retryQueue[i];
+      const track = errorTracks.get(idx);
+
+      if (!track || track.finalCategory || track.attempts.length >= MAX_TOTAL_ATTEMPTS) {
+        i++;
+        continue;
       }
-      return;
+
+      // Wait for eligibility with countdown
+      const now = Date.now();
+      if (track.eligibleAt && track.eligibleAt > now) {
+        const countdownEnd = track.eligibleAt;
+        while (Date.now() < countdownEnd && !cancelled) {
+          const remaining = Math.ceil((countdownEnd - Date.now()) / 1000);
+          const photosLeft = retryQueue.length - i;
+          progress.setStatus('Retrying ' + photosLeft + ' photos (next attempt in ' + remaining + 's...)');
+          try {
+            await sleep(Math.min(1000, countdownEnd - Date.now()), controller.signal);
+          } catch (e) {
+            if (e.name === 'AbortError') { cancelled = true; break; }
+          }
+        }
+        if (cancelled) break;
+      }
+
+      const retryPhaseAttempt = track.attempts.length - Math.min(track.attempts.length, 3);
+      const photo = photos[idx];
+
+      let result;
+      try {
+        result = await attemptFetch(idx, controller.signal);
+      } catch (e) {
+        if (e.name === 'AbortError') { cancelled = true; break; }
+        throw e;
+      }
+
+      if (result === null) {
+        track.finalCategory = 'permanent';
+        completedIndices.add(idx);
+        i++;
+        updateProgress();
+        continue;
+      }
+
+      if (result.ok) {
+        totalFetchTime += result.elapsed;
+        fetchCount++;
+        totalBytes += result.blob.size;
+        const photoDate = parseDate(photo.added);
+        blobs.push({ blob: result.blob, date: photoDate, id: photo.pk || photo.id || idx, sortIdx: idx });
+        completedIndices.add(idx);
+        errorTracks.delete(idx);
+        i++;
+        updateProgress();
+        progress.setStatus('Retrying ' + Math.max(0, retryQueue.length - i) + ' photos...');
+        continue;
+      }
+
+      const { category, retryAfterMs } = classifyError(result.error, result.response);
+      const status = result.response ? result.response.status : 'network';
+      trackError(idx, status, category);
+
+      if (category === 'permanent') {
+        track.finalCategory = 'permanent';
+        completedIndices.add(idx);
+        i++;
+        updateProgress();
+        const remaining = retryQueue.slice(i).filter(qi => {
+          const t = errorTracks.get(qi);
+          return t && !t.finalCategory && t.attempts.length < MAX_TOTAL_ATTEMPTS;
+        });
+        if (remaining.length === 0) break;
+        continue;
+      }
+
+      if (track.attempts.length >= MAX_TOTAL_ATTEMPTS) {
+        track.finalCategory = track.attempts[track.attempts.length - 1].category;
+        completedIndices.add(idx);
+        i++;
+        updateProgress();
+        continue;
+      }
+
+      // Still retryable -- update eligibility and move to end
+      if (category === 'rate-limited' && retryAfterMs) {
+        track.eligibleAt = Date.now() + retryAfterMs;
+      } else {
+        const backoffIdx = Math.min(retryPhaseAttempt, RETRY_PHASE_BACKOFF.length - 1);
+        track.eligibleAt = Date.now() + RETRY_PHASE_BACKOFF[backoffIdx];
+      }
+      retryQueue.push(retryQueue.splice(i, 1)[0]);
     }
 
-    // Sort by original photo order before zipping
-    blobs.sort((a, b) => a.sortIdx - b.sortIdx);
-
-    // Build zip and download
-    try {
-      const zipSize = await buildAndDownloadZip(blobs, petName, theme, progress);
-      const zipMB = (zipSize / (1024 * 1024)).toFixed(1);
-
-      if (failCount > 0) {
-        progress.setStatus(`Done! ${blobs.length} of ${photos.length} photos (${failCount} failed) \u2014 ${zipMB} MB`);
-      } else {
-        progress.setStatus(`Done! ${blobs.length} photos downloaded \u2014 ${zipMB} MB`);
+    // Mark remaining queued items as final
+    for (let j = i; j < retryQueue.length; j++) {
+      const track = errorTracks.get(retryQueue[j]);
+      if (track && !track.finalCategory) {
+        track.finalCategory = track.attempts.length > 0 ? track.attempts[track.attempts.length - 1].category : 'transient';
+        completedIndices.add(retryQueue[j]);
       }
+    }
+  }
 
-      progress.showOK();
-    } catch (e) {
-      progress.setStatus('Failed to build zip: ' + e.message);
-      progress.showOK();
+  function handleCancelUI() {
+    if (blobs.length > 0) {
+      const permFails = [...errorTracks.values()].filter(t => t.finalCategory).length;
+      const queuedFails = [...errorTracks.values()].filter(t => !t.finalCategory).length;
+      const totalFails = permFails + queuedFails;
+      progress.showCancelConfirm(
+        blobs.length,
+        photos.length,
+        totalFails,
+        () => run(),
+        downloadPartial,
+        () => progress.backdrop.remove(),
+      );
+    } else {
+      progress.backdrop.remove();
     }
   }
 
@@ -935,7 +1151,51 @@ async function downloadPhotos(photos, petName, theme, confirmBackdrop) {
     try {
       const zipSize = await buildAndDownloadZip(sorted, petName, theme, progress);
       const zipMB = (zipSize / (1024 * 1024)).toFixed(1);
-      progress.setStatus(`Done! ${blobs.length} photos downloaded \u2014 ${zipMB} MB`);
+      const permFails = [...errorTracks.values()].filter(t => t.finalCategory).length;
+      const queuedFails = [...errorTracks.values()].filter(t => !t.finalCategory).length;
+      const totalFails = permFails + queuedFails;
+      if (totalFails > 0) {
+        progress.setStatus('Done! ' + blobs.length + ' photos downloaded (' + totalFails + ' failed) \u2014 ' + zipMB + ' MB');
+        progress.showFailureReport(errorTracks, theme);
+      } else {
+        progress.setStatus('Done! ' + blobs.length + ' photos downloaded \u2014 ' + zipMB + ' MB');
+      }
+      progress.showOK();
+    } catch (e) {
+      progress.setStatus('Failed to build zip: ' + e.message);
+      progress.showOK();
+    }
+  }
+
+  async function run() {
+    await initialPass();
+
+    if (cancelled) {
+      handleCancelUI();
+      return;
+    }
+
+    await retryPhase();
+
+    if (cancelled) {
+      handleCancelUI();
+      return;
+    }
+
+    blobs.sort((a, b) => a.sortIdx - b.sortIdx);
+
+    try {
+      const zipSize = await buildAndDownloadZip(blobs, petName, theme, progress);
+      const zipMB = (zipSize / (1024 * 1024)).toFixed(1);
+      const permFails = getFailCount();
+
+      if (permFails > 0) {
+        progress.setStatus('Done! ' + blobs.length + ' of ' + photos.length + ' photos (' + permFails + ' failed) \u2014 ' + zipMB + ' MB');
+        progress.showFailureReport(errorTracks, theme);
+      } else {
+        progress.setStatus('Done! ' + blobs.length + ' photos downloaded \u2014 ' + zipMB + ' MB');
+      }
+
       progress.showOK();
     } catch (e) {
       progress.setStatus('Failed to build zip: ' + e.message);
