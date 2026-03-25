@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Auto-rebuild when source changes are staged
+if git diff --cached --name-only | grep -q '^src/'; then
+  npm run build
+  git add dist/ index.html
+fi

@@ -34,6 +34,10 @@ The build has several layers to make bookmarklets work correctly in browser book
    - `"` is encoded as `&quot;` (prevents breaking the href attribute)
    - Replacement uses `() => tag` function form to avoid `$&` expansion in JSZip's minified code
 
+## Hooks
+
+A pre-commit hook in `hooks/pre-commit` auto-rebuilds and stages `dist/` and `index.html` when `src/` changes are committed. Enabled via `git config core.hooksPath hooks`. Never skip with `--no-verify` -- the build output must stay in sync with source since GitHub Pages serves it directly.
+
 ## Conventions
 
 - Version lives in `package.json`; build reads it from there
