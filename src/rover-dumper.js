@@ -5,7 +5,7 @@ import JSZip from 'jszip';
 // ============================================================================
 
 const PAGE_SIZE = 100; // request large pages; server may cap lower
-const EST_AVG_PHOTO_MB = 1.4; // derived from real Rover photo data
+const EST_AVG_PHOTO_MB = 0.8; // conservative middle ground across varied photo resolutions
 const MIN_SAMPLES = 10; // minimum fetch samples before using running averages
 const CONCURRENCY = 3; // parallel image fetches
 const MAX_INLINE_RETRIES = 2; // retries per photo during initial pass (transient only)
