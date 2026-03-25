@@ -6,7 +6,8 @@
   "homepage": "https://rover-dumper.jklein.dev/",
   "repository": "j-256/rover-dumper",
   "scripts": {
-    "build": "./build.sh"
+    "build": "./build.sh",
+    "version": "npm run build && git add dist/ index.html"
   },
   "dependencies": {
     "jszip": "^3.10.1"

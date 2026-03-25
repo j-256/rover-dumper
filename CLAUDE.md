@@ -9,7 +9,7 @@ Rover Dumper is a browser bookmarklet that bulk-downloads pet photos from Rover.
 ```bash
 npm install                       # Install dependencies (jszip + esbuild)
 npm run build                     # Bundle + minify src -> dist, update index.html
-npm version <major|minor|patch>   # Bump version + git tag, then npm run build
+npm version <major|minor|patch>   # Bump version, rebuild, commit + tag
 ```
 
 ## Architecture
@@ -24,12 +24,12 @@ npm version <major|minor|patch>   # Bump version + git tag, then npm run build
 
 The build has several layers to make bookmarklets work correctly in browser bookmark URLs:
 
-1. esbuild bundles with `--supported:template-literal=false` (downlevels to `.concat()` so no literal newlines survive -- browsers corrupt newlines in bookmark URLs)
+1. esbuild bundles with `--supported:template-literal=false` (downlevels template literals so no literal newlines survive -- browsers corrupt newlines in bookmark URLs)
 2. esbuild bundles with `--legal-comments=none` (strips JSZip/pako license comment block)
 3. Output is collapsed to a single line via `tr -d '\n'`
 4. `javascript:/*version*/` prefix is prepended
 5. When injecting into `index.html` href:
-   - `%` is encoded as `%25` (prevents browsers from decoding JS modulo expressions like `%31` as URL escapes)
+   - `%` is encoded as `%25` (prevents browsers from interpreting `%` + hex digits in minified code as URL percent-encoding)
    - `&` is encoded as `&amp;` (prevents HTML parser from decoding `&lt` as `<` entity)
    - `"` is encoded as `&quot;` (prevents breaking the href attribute)
    - Replacement uses `() => tag` function form to avoid `$&` expansion in JSZip's minified code
