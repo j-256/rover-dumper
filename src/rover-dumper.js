@@ -50,17 +50,23 @@ function getCsrfToken() {
 
 async function fetchPage(opk, pageNum, signal) {
   const url = `https://www.rover.com/api/v7/pets/${opk}/images/?page=${pageNum}&page_size=${PAGE_SIZE}`;
-  const res = await fetch(url, {
-    headers: { 'X-CSRFToken': getCsrfToken() },
-    credentials: 'include',
-    signal,
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: { 'X-CSRFToken': getCsrfToken() },
+      credentials: 'include',
+      signal,
+    });
+  } catch (e) {
+    if (e.name === 'AbortError') throw e;
+    throw { error: e, response: null };
+  }
 
   if (res.status === 401 || res.status === 403) {
     throw new Error('AUTH');
   }
   if (!res.ok) {
-    throw new Error(`API error: ${res.status}`);
+    throw { error: new Error('API error: ' + res.status), response: res };
   }
   return res.json();
 }
@@ -130,8 +136,37 @@ function getErrorMessage(track) {
 // ============================================================================
 
 // Fetch all photo metadata, calling onProgress(loadedCount, total) as pages arrive
-async function fetchAllMetadata(opk, signal, onProgress) {
-  const first = await fetchPage(opk, 1, signal);
+async function fetchAllMetadata(opk, signal, onProgress, onRetry) {
+  async function fetchPageWithRetry(pageNum) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await fetchPage(opk, pageNum, signal);
+      } catch (e) {
+        if (e.name === 'AbortError') throw e;
+        if (e instanceof Error && e.message === 'AUTH') throw e;
+
+        const res = e.response || null;
+        const { category, retryAfterMs } = classifyError(e.error || e, res);
+
+        if (category === 'permanent') break;
+
+        if (attempt < 2) {
+          let delayMs;
+          if (category === 'rate-limited' && retryAfterMs) {
+            delayMs = Math.min(retryAfterMs, MAX_RETRY_AFTER_MS);
+          } else {
+            delayMs = INLINE_BACKOFF[attempt];
+          }
+          if (onRetry) onRetry(true);
+          await sleep(delayMs, signal);
+          if (onRetry) onRetry(false);
+        }
+      }
+    }
+    throw new Error('Failed to load photo metadata (page ' + pageNum + '). Try again later.');
+  }
+
+  const first = await fetchPageWithRetry(1);
   const total = first.count;
 
   if (total === 0) {
@@ -141,11 +176,9 @@ async function fetchAllMetadata(opk, signal, onProgress) {
   const photos = first.results.slice();
   if (onProgress) onProgress(photos.length, total);
 
-  // Follow the `next` URL rather than computing page count, since the
-  // server may return fewer results per page than requested
   let pageNum = 2;
   while (photos.length < total) {
-    const page = await fetchPage(opk, pageNum++, signal);
+    const page = await fetchPageWithRetry(pageNum++);
     if (page.results.length === 0) break;
     photos.push(...page.results);
     if (onProgress) onProgress(photos.length, total);
@@ -938,8 +971,17 @@ async function downloadPhotos(photos, petName, theme, confirmBackdrop) {
   document.body.appendChild(loadingBackdrop);
 
   try {
+    let retrying = false;
     const photos = await fetchAllMetadata(opk, null, (loaded, total) => {
-      loadingMsg.textContent = `Loading photo metadata... ${loaded} / ${total}`;
+      loadingMsg.textContent = 'Loading photo metadata... ' + loaded + ' / ' + total + (retrying ? ' (retrying...)' : '');
+    }, (isRetrying) => {
+      retrying = isRetrying;
+      const current = loadingMsg.textContent;
+      if (isRetrying && !current.includes('(retrying...)')) {
+        loadingMsg.textContent = current + ' (retrying...)';
+      } else if (!isRetrying) {
+        loadingMsg.textContent = current.replace(' (retrying...)', '');
+      }
     });
 
     // Remove loading screen
