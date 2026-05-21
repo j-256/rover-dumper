@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -29,14 +29,14 @@ rm dist/rover-dumper.bundle.js
 
 # Update index.html (bookmarklet href + canonical URLs)
 if [[ -f index.html ]]; then
-  node <<SCRIPT
+  HOMEPAGE="$homepage" node <<'SCRIPT'
 const fs = require('fs');
-const homepage = ${homepage@Q};
+const homepage = process.env.HOMEPAGE;
 const bkmk = fs.readFileSync('dist/rover-dumper.min.js', 'utf8').trim();
 let html = fs.readFileSync('index.html', 'utf8');
 const re = /<!-- BOOKMARKLET_START -->.*?<!-- BOOKMARKLET_END -->/s;
 const href = bkmk.replace(/%/g, '%25').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-const tag = \`<!-- BOOKMARKLET_START --><a id="bookmarklet" href="\${href}" class="bookmarklet-btn" onclick="return false;">Rover Dumper</a><!-- BOOKMARKLET_END -->\`;
+const tag = `<!-- BOOKMARKLET_START --><a id="bookmarklet" href="${href}" class="bookmarklet-btn" onclick="return false;">Rover Dumper</a><!-- BOOKMARKLET_END -->`;
 html = html.replace(re, () => tag);
 html = html.replace(/(<link rel="canonical" href=")[^"]*(")/, (_, a, b) => a + homepage + b);
 html = html.replace(/(<meta property="og:url" content=")[^"]*(")/, (_, a, b) => a + homepage + b);
@@ -48,9 +48,9 @@ fi
 
 # Update README.md install link
 if [[ -f README.md ]]; then
-  node <<SCRIPT
+  HOMEPAGE="$homepage" node <<'SCRIPT'
 const fs = require('fs');
-const homepage = ${homepage@Q};
+const homepage = process.env.HOMEPAGE;
 let md = fs.readFileSync('README.md', 'utf8');
 md = md.replace(/(\[Install it here\]\()[^)]*(\))/, (_, a, b) => a + homepage + b);
 fs.writeFileSync('README.md', md);
