@@ -4,5 +4,5 @@ set -euo pipefail
 # Auto-rebuild when source changes are staged
 if git diff --cached --name-only | grep -q '^src/'; then
   npm run build
-  git add dist/ index.html
+  git add dist/ index.html sitemap.xml
 fi

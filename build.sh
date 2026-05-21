@@ -41,6 +41,19 @@ SCRIPT
   echo "Updated index.html bookmarklet href"
 fi
 
+# Update sitemap.xml lastmod
+if [[ -f sitemap.xml ]]; then
+  today=$(date -u +%Y-%m-%d)
+  node -e "
+    const fs = require('fs');
+    const today = '${today}';
+    let xml = fs.readFileSync('sitemap.xml', 'utf8');
+    xml = xml.replace(/<lastmod>[^<]*<\/lastmod>/g, '<lastmod>' + today + '</lastmod>');
+    fs.writeFileSync('sitemap.xml', xml);
+  "
+  echo "Updated sitemap.xml lastmod to ${today}"
+fi
+
 size=$(wc -c < dist/rover-dumper.min.js | tr -d ' ')
 echo "Output: dist/rover-dumper.min.js (${size} bytes)"
 echo "Done."
