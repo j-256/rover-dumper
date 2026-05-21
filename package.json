@@ -10,7 +10,7 @@
     "setup": "git config core.hooksPath hooks",
     "build": "./build.sh",
     "test": "node --test 'test/**/*.test.js'",
-    "version": "npm run build && git add dist/ index.html"
+    "version": "npm run build && git add dist/ index.html sitemap.xml robots.txt README.md"
   },
   "dependencies": {
     "jszip": "^3.10.1"

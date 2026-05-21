@@ -3,8 +3,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-# Read version from package.json
+# Read version + canonical URL from package.json
 version=$(node -p "require('./package.json').version")
+homepage=$(node -p "require('./package.json').homepage")
 
 echo "Building rover-dumper v${version}..."
 
@@ -26,33 +27,55 @@ printf '%s' "javascript:/*rover-dumper@${version}*/" > dist/rover-dumper.min.js
 tr -d '\n' < dist/rover-dumper.bundle.js >> dist/rover-dumper.min.js
 rm dist/rover-dumper.bundle.js
 
-# Update index.html bookmarklet href
+# Update index.html (bookmarklet href + canonical URLs)
 if [[ -f index.html ]]; then
-  node <<'SCRIPT'
+  node <<SCRIPT
 const fs = require('fs');
+const homepage = ${homepage@Q};
 const bkmk = fs.readFileSync('dist/rover-dumper.min.js', 'utf8').trim();
 let html = fs.readFileSync('index.html', 'utf8');
 const re = /<!-- BOOKMARKLET_START -->.*?<!-- BOOKMARKLET_END -->/s;
 const href = bkmk.replace(/%/g, '%25').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-const tag = `<!-- BOOKMARKLET_START --><a id="bookmarklet" href="${href}" class="bookmarklet-btn" onclick="return false;">Rover Dumper</a><!-- BOOKMARKLET_END -->`;
+const tag = \`<!-- BOOKMARKLET_START --><a id="bookmarklet" href="\${href}" class="bookmarklet-btn" onclick="return false;">Rover Dumper</a><!-- BOOKMARKLET_END -->\`;
 html = html.replace(re, () => tag);
+html = html.replace(/(<link rel="canonical" href=")[^"]*(")/, (_, a, b) => a + homepage + b);
+html = html.replace(/(<meta property="og:url" content=")[^"]*(")/, (_, a, b) => a + homepage + b);
+html = html.replace(/("url":\s*")[^"]*(")/, (_, a, b) => a + homepage + b);
 fs.writeFileSync('index.html', html);
 SCRIPT
-  echo "Updated index.html bookmarklet href"
+  echo "Updated index.html bookmarklet href + canonical URLs"
 fi
 
-# Update sitemap.xml lastmod
-if [[ -f sitemap.xml ]]; then
-  today=$(date -u +%Y-%m-%d)
-  node -e "
-    const fs = require('fs');
-    const today = '${today}';
-    let xml = fs.readFileSync('sitemap.xml', 'utf8');
-    xml = xml.replace(/<lastmod>[^<]*<\/lastmod>/g, '<lastmod>' + today + '</lastmod>');
-    fs.writeFileSync('sitemap.xml', xml);
-  "
-  echo "Updated sitemap.xml lastmod to ${today}"
+# Update README.md install link
+if [[ -f README.md ]]; then
+  node <<SCRIPT
+const fs = require('fs');
+const homepage = ${homepage@Q};
+let md = fs.readFileSync('README.md', 'utf8');
+md = md.replace(/(\[Install it here\]\()[^)]*(\))/, (_, a, b) => a + homepage + b);
+fs.writeFileSync('README.md', md);
+SCRIPT
+  echo "Updated README.md install link"
 fi
+
+# Generate sitemap.xml + robots.txt from package.json homepage
+today=$(date -u +%Y-%m-%d)
+cat > sitemap.xml <<XML
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${homepage}</loc>
+    <lastmod>${today}</lastmod>
+  </url>
+</urlset>
+XML
+cat > robots.txt <<TXT
+User-agent: *
+Allow: /
+
+Sitemap: ${homepage}sitemap.xml
+TXT
+echo "Generated sitemap.xml + robots.txt for ${homepage}"
 
 size=$(wc -c < dist/rover-dumper.min.js | tr -d ' ')
 echo "Output: dist/rover-dumper.min.js (${size} bytes)"
