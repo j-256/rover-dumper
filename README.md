@@ -2,7 +2,9 @@
 
 Bulk download your pet's photos from [Rover.com](https://www.rover.com). One click, one zip file, full quality.
 
-**[Install it here](https://rover-dumper.jklein.dev/)** — just drag a button to your bookmarks bar.
+**[Install it here](https://rover-dumper.jklein.dev/)** – just drag a button to your bookmarks bar.
+
+![The confirmation dialog: a photo count and date range for the pet, a size estimate, date and photo-range filters, and a Download button](docs/confirm.png)
 
 ## Why
 
