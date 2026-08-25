@@ -46,12 +46,17 @@ The bookmarklet is entirely self-contained — JSZip is bundled into the minifie
 npm install                       # Install dependencies (jszip + esbuild)
 npm run setup                     # Enable pre-commit auto-build
 npm run build                     # Bundle + minify -> dist/rover-dumper.min.js
-npm version <major|minor|patch>   # Bump version + git tag, then npm run build
+npm run release:check             # Verify tests and version-bearing output
+npm version <major|minor|patch>   # Verify, bump, rebuild, commit, tag, and push
 ```
 
 A pre-commit hook in `hooks/` automatically rebuilds and stages `dist/` and `index.html` whenever `src/` changes are committed. Run `npm run setup` after cloning to enable it.
 
 `build.sh` bundles JSZip into the bookmarklet source via esbuild as a single IIFE, strips template literals and license comments for single-line output, then injects the result into `index.html` between marker comments. The `%` character is pre-encoded as `%25` in the HTML href to prevent browsers from misinterpreting JS modulo expressions as URL escape sequences.
+
+## Releases
+
+Use `npm version` as the only release entrypoint. `npm version <major|minor|patch>` runs the clean-main and remote-synchronization guard, repeats the release check, updates the version-bearing bookmarklet and landing-page files, creates the version commit and annotated `v<version>` tag, and pushes both refs atomically. The tag-triggered GitHub Actions workflow verifies the exact tagged bookmarklet and creates the published GitHub Release; an explicit workflow dispatch can safely retry an existing tag.
 
 ## License
 
