@@ -10,7 +10,8 @@
     "setup": "git config core.hooksPath hooks",
     "build": "./build.sh",
     "screenshots": "node scripts/screenshots.mjs",
-    "test": "node --test 'test/**/*.test.js'",
+    "check:docs-cover": "node scripts/check-docs-cover.mjs",
+    "test": "npm run check:docs-cover && node --test 'test/**/*.test.js'",
     "version": "npm run build && git add dist/ index.html sitemap.xml robots.txt README.md"
   },
   "dependencies": {

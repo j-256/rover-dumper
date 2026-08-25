@@ -28,13 +28,14 @@
 // Default outDir is docs/.
 
 import { chromium } from 'playwright';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
 const OUT = process.argv[2] || join(ROOT, 'docs');
+const COVER = join(ROOT, 'docs', 'screenshots', 'cover.png');
 
 // A pet page lives at /dogs/<opk>/; the opk is arbitrary but must be URL-safe.
 const OPK = 'N0Bq9aaQ';
@@ -126,6 +127,11 @@ async function main() {
   // space that GitHub would shrink the card inside of; the card alone stays legible.
   await card.screenshot({ path: join(OUT, 'confirm.png') });
   console.log('  wrote confirm.png');
+  if (process.argv[2] === undefined) {
+    mkdirSync(dirname(COVER), { recursive: true });
+    copyFileSync(join(OUT, 'confirm.png'), COVER);
+    console.log('  wrote screenshots/cover.png');
+  }
 
   await browser.close();
   console.log('done');
