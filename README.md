@@ -58,6 +58,10 @@ A pre-commit hook in `hooks/` automatically rebuilds and stages `dist/` and `ind
 
 Use `npm version` as the only release entrypoint. `npm version <major|minor|patch>` runs the clean-main and remote-synchronization guard, repeats the release check, updates the version-bearing bookmarklet and landing-page files, creates the version commit and annotated `v<version>` tag, and pushes both refs atomically. The tag-triggered GitHub Actions workflow verifies the exact tagged bookmarklet and creates the published GitHub Release; an explicit workflow dispatch can safely retry an existing tag.
 
+## Project cover automation
+
+`npm run screenshots` captures the built bookmarklet's confirmation dialog with fabricated photo metadata and no live Rover requests. CI runs the build and tests before capture, retains the PNG as an artifact, and publishes only a changed `docs/screenshots/cover.png` after successful default-branch verification. Pull requests render without publishing. A superseded source revision cannot overwrite the newer build's cover.
+
 ## License
 
 [MIT](LICENSE)
