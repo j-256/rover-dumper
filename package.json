@@ -18,7 +18,7 @@
     "postversion": "git push --atomic origin main v$npm_package_version"
   },
   "dependencies": {
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.2"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
