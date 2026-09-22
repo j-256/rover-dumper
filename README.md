@@ -62,6 +62,10 @@ Use `npm version` as the only release entrypoint. `npm version <major|minor|patc
 
 `npm run screenshots` captures the built bookmarklet's confirmation dialog with fabricated photo metadata and no live Rover requests. CI runs the build and tests before capture, retains the PNG as an artifact, and publishes only a changed `docs/screenshots/cover.png` after successful default-branch verification. Pull requests render without publishing. A superseded source revision cannot overwrite the newer build's cover.
 
+## Cover image density
+
+The project cover is rendered at 4x pixel density while preserving its logical viewport, so enlarged previews retain more detail. Higher density does not increase the displayed text size; use zoom to inspect small labels.
+
 ## License
 
 [MIT](LICENSE)

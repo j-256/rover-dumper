@@ -96,7 +96,7 @@ async function main() {
   const browser = await chromium.launch();
   const context = await browser.newContext({
     viewport: { width: 900, height: 900 },
-    deviceScaleFactor: 2, // retina: the card's small type is the point, keep it crisp
+    deviceScaleFactor: 4, // retina: the card's small type is the point, keep it crisp
     colorScheme: 'dark', // the dialog reads prefers-color-scheme; dark is the default here
   });
 
