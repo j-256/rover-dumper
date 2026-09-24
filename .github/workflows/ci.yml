@@ -34,6 +34,60 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  prepare-dependabot-generated-files:
+    name: Prepare Dependabot generated files
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.actor == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.head_ref, 'dependabot/npm_and_yarn/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Validate generated files
+        run: |
+          set -eu
+          for path in dist/rover-dumper.min.js index.html sitemap.xml; do
+            if [ ! -f "$path" ] || [ -L "$path" ]; then
+              echo "::error::Expected a regular generated file at ${path}"
+              exit 1
+            fi
+          done
+
+          unexpected="$({
+            git diff --name-only
+          } | while IFS= read -r path; do
+            case "$path" in
+              dist/rover-dumper.min.js|index.html|sitemap.xml) ;;
+              *) printf '%s\n' "$path" ;;
+            esac
+          done)"
+          if [ -n "$unexpected" ]; then
+            echo "::error::Build changed files outside the generated-file allowlist"
+            printf '%s\n' "$unexpected"
+            exit 1
+          fi
+      - name: Retain Dependabot generated files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dependabot-generated-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            dist/rover-dumper.min.js
+            index.html
+            sitemap.xml
+          if-no-files-found: error
+          retention-days: 1
+
   publish-cover:
     name: Publish project cover
     if: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}

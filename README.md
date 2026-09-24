@@ -54,6 +54,8 @@ A pre-commit hook in `hooks/` automatically rebuilds and stages `dist/` and `ind
 
 `build.sh` bundles JSZip into the bookmarklet source via esbuild as a single IIFE, strips template literals and license comments for single-line output, then injects the result into `index.html` between marker comments. The `%` character is pre-encoded as `%25` in the HTML href to prevent browsers from misinterpreting JS modulo expressions as URL escape sequences.
 
+Dependabot pull requests build `dist/rover-dumper.min.js`, `index.html`, and `sitemap.xml` in read-only CI. After that run succeeds, a default-branch workflow validates the Dependabot actor, same-repository npm branch, pull request file allowlist, exact head revision, and artifact contents before committing only those generated files. The write-enabled workflow never executes pull request code and explicitly dispatches CI for its generated-file commit.
+
 ## Releases
 
 Use `npm version` as the only release entrypoint. `npm version <major|minor|patch>` runs the clean-main and remote-synchronization guard, repeats the release check, updates the version-bearing bookmarklet and landing-page files, creates the version commit and annotated `v<version>` tag, and pushes both refs atomically. The tag-triggered GitHub Actions workflow verifies the exact tagged bookmarklet and creates the published GitHub Release; an explicit workflow dispatch can safely retry an existing tag.

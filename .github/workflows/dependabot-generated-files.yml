@@ -1,0 +1,205 @@
+name: Update Dependabot generated files
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: dependabot-generated-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Commit verified generated files
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      startsWith(github.event.workflow_run.head_branch, 'dependabot/npm_and_yarn/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Validate the triggering run and pull request
+        id: validate
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+          RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -eu
+          case "$RUN_HEAD_BRANCH" in
+            dependabot/npm_and_yarn/?*) ;;
+            *) echo "::error::Unexpected head branch: ${RUN_HEAD_BRANCH}"; exit 1 ;;
+          esac
+          if ! printf '%s\n' "$RUN_HEAD_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::Unexpected head revision: ${RUN_HEAD_SHA}"
+            exit 1
+          fi
+
+          pulls_json="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${GITHUB_REPOSITORY}/commits/${RUN_HEAD_SHA}/pulls")"
+          matching_pulls="$(printf '%s\n' "$pulls_json" | jq -c \
+            --arg branch "$RUN_HEAD_BRANCH" \
+            --arg default_branch "$DEFAULT_BRANCH" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg sha "$RUN_HEAD_SHA" \
+            '[.[] | select(
+              .state == "open" and
+              .user.login == "dependabot[bot]" and
+              .head.ref == $branch and
+              .head.repo.full_name == $repository and
+              .head.sha == $sha and
+              .base.ref == $default_branch
+            )]')"
+          if [ "$(printf '%s\n' "$matching_pulls" | jq 'length')" -ne 1 ]; then
+            echo "::error::Expected one matching open Dependabot pull request"
+            exit 1
+          fi
+          pr_number="$(printf '%s\n' "$matching_pulls" | jq -r '.[0].number')"
+
+          dependency_change=false
+          changed_paths="$(gh api --paginate \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/files?per_page=100" \
+            --jq '.[].filename')"
+          while IFS= read -r path; do
+            case "$path" in
+              package.json|package-lock.json)
+                dependency_change=true
+                ;;
+              dist/rover-dumper.min.js|index.html|sitemap.xml)
+                ;;
+              *)
+                echo "::error::Pull request changes a non-allowlisted path: ${path}"
+                exit 1
+                ;;
+            esac
+          done <<EOF
+          $changed_paths
+          EOF
+          if [ "$dependency_change" != true ]; then
+            echo "::error::Pull request has no npm dependency change"
+            exit 1
+          fi
+
+          artifact_name="dependabot-generated-${pr_number}-${RUN_HEAD_SHA}"
+          {
+            printf 'artifact_name=%s\n' "$artifact_name"
+            printf 'head_branch=%s\n' "$RUN_HEAD_BRANCH"
+            printf 'head_sha=%s\n' "$RUN_HEAD_SHA"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download generated files from the verified run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ${{ steps.validate.outputs.artifact_name }}
+          path: ${{ runner.temp }}/dependabot-generated
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Validate artifact contents
+        env:
+          ARTIFACT_ROOT: ${{ runner.temp }}/dependabot-generated
+          MAX_GENERATED_BYTES: 5242880
+        run: |
+          set -eu
+          if [ -n "$(find "$ARTIFACT_ROOT" -type l -print -quit)" ]; then
+            echo "::error::Generated-file artifact contains a symbolic link"
+            exit 1
+          fi
+
+          actual_paths="$(
+            cd "$ARTIFACT_ROOT"
+            find . -type f -print | sed 's#^\./##' | LC_ALL=C sort
+          )"
+          expected_paths="$(printf '%s\n' \
+            dist/rover-dumper.min.js \
+            index.html \
+            sitemap.xml | LC_ALL=C sort)"
+          if [ "$actual_paths" != "$expected_paths" ]; then
+            echo "::error::Generated-file artifact does not match the allowlist"
+            printf 'Expected:\n%s\nActual:\n%s\n' "$expected_paths" "$actual_paths"
+            exit 1
+          fi
+
+          while IFS= read -r path; do
+            size="$(wc -c < "$ARTIFACT_ROOT/$path" | tr -d ' ')"
+            if [ "$size" -eq 0 ] || [ "$size" -gt "$MAX_GENERATED_BYTES" ]; then
+              echo "::error::Generated file has an invalid size: ${path} (${size} bytes)"
+              exit 1
+            fi
+          done <<'EOF'
+          dist/rover-dumper.min.js
+          index.html
+          sitemap.xml
+          EOF
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ steps.validate.outputs.head_sha }}
+          fetch-depth: 0
+
+      - name: Commit generated files to the Dependabot branch
+        id: commit
+        env:
+          ARTIFACT_ROOT: ${{ runner.temp }}/dependabot-generated
+          HEAD_BRANCH: ${{ steps.validate.outputs.head_branch }}
+          HEAD_SHA: ${{ steps.validate.outputs.head_sha }}
+        run: |
+          set -eu
+          git fetch origin "refs/heads/${HEAD_BRANCH}"
+          if [ "$(git rev-parse FETCH_HEAD)" != "$HEAD_SHA" ]; then
+            echo "A newer Dependabot revision superseded this build."
+            printf 'changed=false\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          cp "$ARTIFACT_ROOT/dist/rover-dumper.min.js" dist/rover-dumper.min.js
+          cp "$ARTIFACT_ROOT/index.html" index.html
+          cp "$ARTIFACT_ROOT/sitemap.xml" sitemap.xml
+          if git diff --quiet -- dist/rover-dumper.min.js index.html sitemap.xml; then
+            echo "Generated files are unchanged."
+            printf 'changed=false\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          unexpected="$(git diff --name-only | while IFS= read -r path; do
+            case "$path" in
+              dist/rover-dumper.min.js|index.html|sitemap.xml) ;;
+              *) printf '%s\n' "$path" ;;
+            esac
+          done)"
+          if [ -n "$unexpected" ]; then
+            echo "::error::Artifact application changed files outside the allowlist"
+            printf '%s\n' "$unexpected"
+            exit 1
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- dist/rover-dumper.min.js index.html sitemap.xml
+          git diff --cached --check
+          git commit -m 'Update generated bookmarklet for Dependabot' -- \
+            dist/rover-dumper.min.js index.html sitemap.xml
+          git push origin "HEAD:refs/heads/${HEAD_BRANCH}"
+          printf 'changed=true\n' >> "$GITHUB_OUTPUT"
+
+      - name: Run CI on the generated-file commit
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_BRANCH: ${{ steps.validate.outputs.head_branch }}
+        run: |
+          gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/dispatches" \
+            -f ref="$HEAD_BRANCH"
